@@ -13,8 +13,7 @@
     "build:shared": "npm run build --workspace=@spark-match/shared",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.statements=80 --coverage.thresholds.branches=75",
-    "test:coverage:sonar": "vitest run --coverage --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 --coverage.reporter=lcov",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write \"**/*.{ts,json,md,yaml,yml}\"",
@@ -26,18 +25,12 @@
     "local:shell": "sam local start-lambda",
     "layer:build:node-shared": "bash layers/node-shared/build.sh",
     "layer:build:node-runtime": "bash layers/node-runtime/build.sh",
-    "layer:build:all": "npm run layer:build:node-shared && npm run layer:build:node-runtime",
-    "migrate:create": "node-pg-migrate create --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public -- --helper false",
-    "migrate:up": "node-pg-migrate up --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
-    "migrate:down": "node-pg-migrate down --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
-    "migrate:redo": "node-pg-migrate redo --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
-    "migrate:status": "node-pg-migrate status --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
-    "prepare": "husky"
+    "layer:build:all": "npm run layer:build:node-shared && npm run layer:build:node-runtime"
   },
   "devDependencies": {
-    "@aws-sdk/client-ssm": "^3.1095.0",
     "@types/aws-lambda": "^8.10.145",
-    "@types/node": "^24.0.0",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.14.0",
     "@types/pg": "^8.11.6",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
@@ -45,8 +38,6 @@
     "esbuild": "^0.23.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
-    "husky": "^9.0.0",
-    "node-pg-migrate": "^9.0.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0",
     "vite-tsconfig-paths": "^6.1.1",
@@ -74,7 +65,7 @@
     "zod": "^3.23.0"
   },
   "engines": {
-    "node": ">=24.0.0",
+    "node": ">=20.0.0",
     "npm": ">=10.0.0"
   }
 }

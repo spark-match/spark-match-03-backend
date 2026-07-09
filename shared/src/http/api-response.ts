@@ -1,77 +1,103 @@
-// =============================================================================
-// HTTP response envelope formatters
-// =============================================================================
-// Standard JSON envelope for all Spark Match API responses:
-//   { success: true,  data: <payload>, meta: { requestId, timestamp } }
-//   { success: false, error: { code, message, details[] }, meta: {...} }
-//
-// `error.details` is ALWAYS a non-empty ErrorDetail[] (synthetic when the
-// originating error has no granular detail). The build-handler pipeline
-// calls formatError(err) when an error is thrown; formatResponse is called
-// on success. The `requestId` is REQUIRED on every envelope so the client
-// has a stable correlation handle for support tickets.
-// =============================================================================
+import type { APIGatewayProxyResult } from 'aws-lambda';
+import { ApiError, ErrorCode } from './api-error.js';
+import { z } from 'zod';
 
-import { ApiError } from './api-error.js';
-import type { ErrorDetail } from './error-detail.js';
-
-export interface ResponseMeta {
-  requestId: string;
-  timestamp: string;
-}
-
-export interface SuccessEnvelope<T> {
+export interface ApiResponseBody<T> {
   success: true;
   data: T;
-  meta: ResponseMeta;
+  meta?: {
+    requestId?: string;
+    timestamp?: string;
+  };
 }
 
-export interface ErrorEnvelope {
+export interface ApiErrorBody {
   success: false;
   error: {
     code: string;
     message: string;
-    /** Always present and non-empty. */
-    details: ErrorDetail[];
+    details?: Record<string, unknown>;
   };
-  meta: ResponseMeta;
+  meta?: {
+    requestId?: string;
+    timestamp?: string;
+  };
 }
 
-export function formatResponse<T>(data: T, requestId: string): SuccessEnvelope<T> {
-  return {
+export function formatResponse<T>(
+  data: T,
+  statusCode = 200,
+  requestId?: string,
+): APIGatewayProxyResult {
+  const body: ApiResponseBody<T> = {
     success: true,
     data,
     meta: {
-      requestId,
       timestamp: new Date().toISOString(),
+      ...(requestId ? { requestId } : {}),
     },
+  };
+
+  return {
+    statusCode,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+    },
+    body: JSON.stringify(body),
   };
 }
 
-export function formatError(err: unknown, requestId: string): ErrorEnvelope {
-  const meta: ResponseMeta = {
-    requestId,
-    timestamp: new Date().toISOString(),
-  };
+export function formatError(
+  err: unknown,
+  requestId?: string,
+): APIGatewayProxyResult {
+  let statusCode = 500;
+  let code: ErrorCode = ErrorCode.INTERNAL_ERROR;
+  let message = 'Internal server error';
+  let details: Record<string, unknown> | undefined;
+
   if (err instanceof ApiError) {
-    return {
-      success: false,
-      error: {
-        code: err.code,
-        message: err.message,
-        details: err.details,
-      },
-      meta,
+    statusCode = err.statusCode;
+    code = err.code;
+    message = err.message;
+    details = err.details;
+  } else if (err instanceof z.ZodError) {
+    statusCode = 400;
+    code = ErrorCode.VALIDATION_ERROR;
+    message = 'Validation failed';
+    details = {
+      issues: err.issues.map((i) => ({
+        path: i.path.join('.'),
+        message: i.message,
+        code: i.code,
+      })),
     };
+  } else if (err instanceof Error) {
+    message = err.message;
   }
-  // Unknown error: do not leak internal details to the client.
-  return {
+
+  const body: ApiErrorBody = {
     success: false,
     error: {
-      code: 'internal',
-      message: 'Internal server error',
-      details: [{ code: 'internal.unknown', message: 'Internal server error' }],
+      code,
+      message,
+      ...(details ? { details } : {}),
     },
-    meta,
+    meta: {
+      timestamp: new Date().toISOString(),
+      ...(requestId ? { requestId } : {}),
+    },
+  };
+
+  return {
+    statusCode,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+    },
+    body: JSON.stringify(body),
   };
 }

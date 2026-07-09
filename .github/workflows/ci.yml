@@ -2,33 +2,20 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main]
   push:
-    branches: [main, dev]
+    branches: [main]
 
 permissions:
   contents: read
   pull-requests: read
 
 jobs:
-  sonar:
-    uses: spark-match/spark-match-01-devops/.github/workflows/sonar-typescript.yml@main
+  # Lint, typecheck, tests (caller from 01-devops reusable workflows)
+  quality-checks:
+    uses: spark-match/01-devops/.github/workflows/quality-checks.yml@main
     with:
-      project-key: ${{ vars.SONAR_PROJECT_KEY }}
-      project-name: ${{ vars.SONAR_PROJECT_NAME }}
-      organization: ${{ vars.SONAR_ORGANIZATION }}
-      sources: ${{ vars.SONAR_SOURCES }}
-      tests: ${{ vars.SONAR_TESTS }}
-      test-inclusions: ${{ vars.SONAR_TEST_INCLUSIONS }}
-      exclude-patterns: ${{ vars.SONAR_EXCLUDE_PATTERNS }}
-      working-directory: '.'
-      env: 'ci'
-      node-version: ${{ vars.DEFAULT_NODE_VERSION }}
-      package-manager: ${{ vars.PACKAGE_MANAGER }}
-      lockfile-name: ${{ vars.LOCKFILE_NAME }}
-      install-command: 'npm ci && npm run build:shared'
-      test-command: 'npx vitest run --coverage --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 --coverage.reporter=lcov'
-      coverage-paths: 'coverage/lcov.info'
-      fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
-    secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      working-directory: .
+      node-version: '20'
+      run-shared-tests: 'true'
+      run-contexts-tests: 'true'

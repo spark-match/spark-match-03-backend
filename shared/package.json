@@ -37,7 +37,7 @@
     },
     "./contracts/*": {
       "types": "./dist/contracts/*.d.ts",
-      "import": "./dist/contracts/*.d.ts"
+      "import": "./dist/contracts/*.js"
     }
   },
   "scripts": {
@@ -49,16 +49,13 @@
   "dependencies": {
     "@aws-lambda-powertools/logger": "^2.10.0",
     "@aws-lambda-powertools/parameters": "^2.10.0",
-    "@aws-sdk/client-ssm": "^3.665.0",
     "@aws-lambda-powertools/tracer": "^2.10.0",
-    "@aws-sdk/client-eventbridge": "^3.665.0",
-    "@aws-sdk/client-secrets-manager": "^3.665.0",
-    "jose": "^6.2.4",
+    "jsonwebtoken": "^9.0.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.145",
-    "@types/node": "^24.0.0",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.14.0",
     "typescript": "^5.5.0"
   }
 }

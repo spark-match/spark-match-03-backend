@@ -20,19 +20,9 @@ Parameters:
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 180, 365]
     Description: CloudWatch Logs retention in days.
 
-  VpcSubnetIds:
-    Type: CommaDelimitedList
-    Default: ''
-    Description: VPC subnet IDs for VPC-attached Lambdas (leave empty for non-VPC dev runs).
-
-  VpcSecurityGroupIds:
-    Type: CommaDelimitedList
-    Default: ''
-    Description: Security group IDs for VPC-attached Lambdas (leave empty for non-VPC dev runs).
-
 Globals:
   Function:
-    Runtime: nodejs24.x
+    Runtime: nodejs20.x
     MemorySize: 512
     Timeout: 15
     Tracing: Active
@@ -102,7 +92,7 @@ Resources:
       Description: Shared TS utilities (auth, http, logger, events, infra, templates)
       ContentUri: ./layers/node-shared/dist
       CompatibleRuntimes:
-        - nodejs24.x
+        - nodejs20.x
       RetentionPolicy: Retain
 
   NodeRuntimeLayer:
@@ -112,7 +102,7 @@ Resources:
       Description: Node runtime deps (zod, ajv, middy, powertools, kysely, pg)
       ContentUri: ./layers/node-runtime
       CompatibleRuntimes:
-        - nodejs24.x
+        - nodejs20.x
       RetentionPolicy: Retain
 
   # ===========================================================================
@@ -127,8 +117,6 @@ Resources:
         HttpApiId: !Ref HttpApi
         NodeSharedLayerArn: !Ref NodeSharedLayer
         NodeRuntimeLayerArn: !Ref NodeRuntimeLayer
-        VpcSubnetIds: !Ref VpcSubnetIds
-        VpcSecurityGroupIds: !Ref VpcSecurityGroupIds
       Tags:
         - Key: Project
           Value: spark-match
@@ -175,15 +163,3 @@ Outputs:
     Value: !Ref NodeRuntimeLayer
     Export:
       Name: !Sub 'spark-match-${Environment}-NodeRuntimeLayerArn'
-
-  IdentityStackVpcSubnetIds:
-    Description: Comma-separated VPC subnet IDs forwarded to the identity nested stack (empty for non-VPC dev runs)
-    Value: !Join [',', !Ref VpcSubnetIds]
-    Export:
-      Name: !Sub 'spark-match-${Environment}-IdentityStackVpcSubnetIds'
-
-  IdentityStackVpcSecurityGroupIds:
-    Description: Comma-separated security group IDs forwarded to the identity nested stack (empty for non-VPC dev runs)
-    Value: !Join [',', !Ref VpcSecurityGroupIds]
-    Export:
-      Name: !Sub 'spark-match-${Environment}-IdentityStackVpcSecurityGroupIds'

@@ -15,18 +15,10 @@ Parameters:
     Type: String
   NodeRuntimeLayerArn:
     Type: String
-  VpcSubnetIds:
-    Type: CommaDelimitedList
-    Default: ''
-    Description: Comma-separated list of VPC subnet IDs (for VPC-attached Lambdas).
-  VpcSecurityGroupIds:
-    Type: CommaDelimitedList
-    Default: ''
-    Description: Comma-separated list of security group IDs (for VPC-attached Lambdas).
 
 Globals:
   Function:
-    Runtime: nodejs24.x
+    Runtime: nodejs20.x
     MemorySize: 512
     Timeout: 10
     Tracing: Active
@@ -40,56 +32,8 @@ Globals:
         EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
         DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
         JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
-        # Node 24 no longer auto-loads Amazon CA certificates. The RDS CA
-        # bundle is shipped via the layer; point Node at it before opening
-        # any TLS connection to RDS.
-        NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-
-Conditions:
-  HasVpcConfig: !Not [!Equals [!Join ['', !Ref VpcSubnetIds], '']]
 
 Resources:
-  IdentityRegisterLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/spark-match-identity-register-${Environment}'
-      RetentionInDays: 14
-  IdentityLoginLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/spark-match-identity-login-${Environment}'
-      RetentionInDays: 14
-  IdentityGetMeLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/spark-match-identity-get-me-${Environment}'
-      RetentionInDays: 14
-  IdentityUpdateProfileLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/spark-match-identity-update-profile-${Environment}'
-      RetentionInDays: 14
-  IdentityChangePasswordLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/spark-match-identity-change-password-${Environment}'
-      RetentionInDays: 14
-  IdentityListUsersLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/spark-match-identity-list-users-${Environment}'
-      RetentionInDays: 14
-  IdentityActivateUserLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/spark-match-identity-activate-user-${Environment}'
-      RetentionInDays: 14
-  IdentityDeactivateUserLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/spark-match-identity-deactivate-user-${Environment}'
-      RetentionInDays: 14
-
   IdentityRegisterFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -111,11 +55,6 @@ Resources:
             EventBusName: !Sub 'spark-match-events-${Environment}'
         - SSMParameterReadPolicy:
             ParameterName: !Sub 'spark-match-${Environment}-*'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
 
   IdentityLoginFunction:
     Type: AWS::Serverless::Function
@@ -134,11 +73,6 @@ Resources:
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
 
   IdentityGetMeFunction:
     Type: AWS::Serverless::Function
@@ -158,175 +92,6 @@ Resources:
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
-
-  IdentityUpdateProfileFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub 'spark-match-identity-update-profile-${Environment}'
-      CodeUri: ./src/handlers
-      Handler: update-profile.handler
-      Description: Update own profile (PATCH /v1/users/me)
-      Events:
-        UpdateProfileApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApiId
-            Path: /v1/users/me
-            Method: PATCH
-            Authorizer: NONE
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
-
-  IdentityChangePasswordFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub 'spark-match-identity-change-password-${Environment}'
-      CodeUri: ./src/handlers
-      Handler: change-password.handler
-      Description: Change own password (PUT /v1/users/me/password)
-      Events:
-        ChangePasswordApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApiId
-            Path: /v1/users/me/password
-            Method: PUT
-            Authorizer: NONE
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
-
-  IdentityListUsersFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub 'spark-match-identity-list-users-${Environment}'
-      CodeUri: ./src/handlers
-      Handler: list-users.handler
-      Description: List users (GET /v1/users) - admin only
-      Events:
-        ListUsersApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApiId
-            Path: /v1/users
-            Method: GET
-            Authorizer: NONE
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
-
-  IdentityActivateUserFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub 'spark-match-identity-activate-user-${Environment}'
-      CodeUri: ./src/handlers
-      Handler: activate-user.handler
-      Description: Activate user (POST /v1/users/{userId}/activate) - admin only
-      Events:
-        ActivateUserApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApiId
-            Path: /v1/users/{userId}/activate
-            Method: POST
-            Authorizer: NONE
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
-
-  IdentityDeactivateUserFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub 'spark-match-identity-deactivate-user-${Environment}'
-      CodeUri: ./src/handlers
-      Handler: deactivate-user.handler
-      Description: Deactivate user (POST /v1/users/{userId}/deactivate) - admin only
-      Events:
-        DeactivateUserApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApiId
-            Path: /v1/users/{userId}/deactivate
-            Method: POST
-            Authorizer: NONE
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
-
-  # ===========================================================================
-  # IdentityMigrateFunction - runs node-pg-migrate against RDS
-  # ===========================================================================
-  # NOT exposed via HTTP. Invoked directly via:
-  #   aws lambda invoke \
-  #     --function-name spark-match-identity-migrate-dev \
-  #     --payload '{"direction":"up"}' \
-  #     out.json
-  # IAM-based auth (lambda:InvokeFunction) replaces the previous token-based
-  # auth so there is no static secret to rotate and no HTTP surface to
-  # attack.
-  # ===========================================================================
-  IdentityMigrateFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub 'spark-match-identity-migrate-${Environment}'
-      CodeUri: ./src/handlers
-      Handler: migrate.handler
-      Description: Apply node-pg-migrate migrations against RDS (direct invoke, not HTTP)
-      Timeout: 60
-      MemorySize: 1024
-      Environment:
-        Variables:
-          POWERTOOLS_SERVICE_NAME: !Sub 'identity-migrate-${Environment}'
-          ENVIRONMENT: !Ref Environment
-          # Resolved by Terraform from the same secret as the other
-          # identity Lambdas (DB_SECRET_ARN) at deploy time.
-          MIGRATE_DATABASE_URL: '{{resolve:ssm:/spark-match/db/connection-url}}'
-          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - SSMParameterReadPolicy:
-            ParameterName: 'spark-match-${Environment}-db-connection-url'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
 
 Outputs:
   IdentityRegisterFunctionArn:
@@ -335,15 +100,3 @@ Outputs:
     Value: !GetAtt IdentityLoginFunction.Arn
   IdentityGetMeFunctionArn:
     Value: !GetAtt IdentityGetMeFunction.Arn
-  IdentityUpdateProfileFunctionArn:
-    Value: !GetAtt IdentityUpdateProfileFunction.Arn
-  IdentityChangePasswordFunctionArn:
-    Value: !GetAtt IdentityChangePasswordFunction.Arn
-  IdentityListUsersFunctionArn:
-    Value: !GetAtt IdentityListUsersFunction.Arn
-  IdentityActivateUserFunctionArn:
-    Value: !GetAtt IdentityActivateUserFunction.Arn
-  IdentityDeactivateUserFunctionArn:
-    Value: !GetAtt IdentityDeactivateUserFunction.Arn
-  IdentityMigrateFunctionArn:
-    Value: !GetAtt IdentityMigrateFunction.Arn

@@ -1,4 +1,4 @@
-﻿# CODEOWNERS — Spark Match Backend (03-backend)
+# CODEOWNERS — Spark Match Backend (03-backend)
 #
 # Política de aprobación (ADR-003 branch-based deployment):
 # - dev: 1 aprobación del CODE OWNER técnico (backend-devs) es suficiente.
@@ -13,8 +13,9 @@
 #    backend-devs (ahincho + BriyitHT), incluyendo workflows, layers, shared
 #    kernel y contexts. No hay sub-teams con ownership exclusivo.
 # 2. Reduce el ruido en PRs: 1 solo team como CODE OWNER review.
-# 3. Si backend-devs necesita apoyo de devops/ai-devs/qa, lo solicita
-#    MANUALMENTE como reviewer adicional (no CODE OWNER).
+# 3. Si backend-devs necesita apoyo de devops/ai-devs/qa para revisar
+#    cambios específicos (workflows, ML, tests), lo solicita MANUALMENTE
+#    como reviewer adicional (no CODE OWNER).
 # 4. En dev se requiere 1 CODE OWNER approval; los reviewers manuales
 #    adicionales (no CODE OWNER) no bloquean el merge.
 #
