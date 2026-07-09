@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform:
+  - AWS::Serverless-2016-10-31
+
+Description: >
+  Spark Match Backend - Serverless DDD+EDA monolith.
+  Hybrid architecture: AWS Lambda (CRUD/EDA) + dedicated Python server (AI Advisor in 08-deep-agent).
+  See docs/ARCHITECTURE.md for the full design.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment.
+
+  LogRetentionInDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 180, 365]
+    Description: CloudWatch Logs retention in days.
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 512
+    Timeout: 15
+    Tracing: Active
+    Architectures: [x86_64]
+    Environment:
+      Variables:
+        # These values come from SSM Parameter Store (created by Terraform in 02-infrastructure)
+        # SAM uses {{resolve:ssm:/path}} to fetch them at deploy time
+        POWERTOOLS_SERVICE_NAME: !Ref AWS::StackName
+        POWERTOOLS_LOG_LEVEL: INFO
+        LOG_LEVEL: INFO
+        ENVIRONMENT: !Ref Environment
+        # SSM references - these come from Terraform
+        EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
+        DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
+        JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
+        IDEMPOTENCY_TABLE_NAME: '{{resolve:ssm:/spark-match/dynamodb/idempotency-table}}'
+    Tags:
+      - Key: Project
+        Value: spark-match
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: ManagedBy
+        Value: SAM
+      - Key: Component
+        Value: backend
+
+Resources:
+  # ===========================================================================
+  # API Gateway HTTP API v2
+  # ===========================================================================
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: !Sub 'Spark Match Backend API (${Environment})'
+      CorsConfiguration:
+        AllowOrigins:
+          - '*' # Tighten in prod via custom domain + WAF
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        ExposeHeaders:
+          - X-Correlation-Id
+        MaxAge: 600
+      Tags:
+        Project: spark-match
+        Environment: !Ref Environment
+
+  # ===========================================================================
+  # Lambda Layers (built from layers/ directory)
+  # ===========================================================================
+  NodeSharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub 'spark-match-node-shared-${Environment}'
+      Description: Shared TS utilities (auth, http, logger, events, infra, templates)
+      ContentUri: ./layers/node-shared/dist
+      CompatibleRuntimes:
+        - nodejs20.x
+      RetentionPolicy: Retain
+
+  NodeRuntimeLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub 'spark-match-node-runtime-${Environment}'
+      Description: Node runtime deps (zod, ajv, middy, powertools, kysely, pg)
+      ContentUri: ./layers/node-runtime
+      CompatibleRuntimes:
+        - nodejs20.x
+      RetentionPolicy: Retain
+
+  # ===========================================================================
+  # Nested stack: Identity Context
+  # ===========================================================================
+  IdentityStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./contexts/identity/template.yaml
+      Parameters:
+        Environment: !Ref Environment
+        HttpApiId: !Ref HttpApi
+        NodeSharedLayerArn: !Ref NodeSharedLayer
+        NodeRuntimeLayerArn: !Ref NodeRuntimeLayer
+      Tags:
+        - Key: Project
+          Value: spark-match
+        - Key: Component
+          Value: identity
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
+  # CloudWatch Log Group (root)
+  # ===========================================================================
+  ApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/spark-match/${Environment}/application'
+      RetentionInDays: !Ref LogRetentionInDays
+      Tags:
+        - Key: Project
+          Value: spark-match
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  HttpApiUrl:
+    Description: HTTP API Gateway endpoint URL
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub 'spark-match-${Environment}-HttpApiUrl'
+
+  HttpApiId:
+    Description: HTTP API Gateway ID
+    Value: !Ref HttpApi
+    Export:
+      Name: !Sub 'spark-match-${Environment}-HttpApiId'
+
+  NodeSharedLayerArn:
+    Description: Shared utilities layer ARN
+    Value: !Ref NodeSharedLayer
+    Export:
+      Name: !Sub 'spark-match-${Environment}-NodeSharedLayerArn'
+
+  NodeRuntimeLayerArn:
+    Description: Node runtime deps layer ARN
+    Value: !Ref NodeRuntimeLayer
+    Export:
+      Name: !Sub 'spark-match-${Environment}-NodeRuntimeLayerArn'
