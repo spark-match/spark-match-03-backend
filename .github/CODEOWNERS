@@ -1,76 +1,25 @@
 ﻿# CODEOWNERS — Spark Match Backend (03-backend)
 #
-# Define quién revisa los PRs en cada área del repositorio.
-# Reglas: la última coincidencia gana (https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)
+# Política de aprobación (ADR-003 branch-based deployment):
+# - dev: 1 aprobación del CODE OWNER técnico (backend-devs) es suficiente.
+#   El autor NO puede aprobar su propio PR (regla GitHub). Si nadie más del
+#   team puede aprobar, solicitar manualmente un CODE OWNER de otro team
+#   (devops, ai-devs) como reviewer adicional.
+# - main: 1 CODE OWNER review (backend-devs) + reviewer manual de
+#   @spark-match/product-owners (solicitado por el autor al abrir el PR).
 #
-# Comentarios: usar `#` solo (no `>` blockquote, que GitHub parsea como pattern).
+# ¿Por qué solo backend-devs (sin reglas granulares)?
+# 1. El repo es un monorepo donde TODO el código es responsabilidad de
+#    backend-devs (ahincho + BriyitHT), incluyendo workflows, layers, shared
+#    kernel y contexts. No hay sub-teams con ownership exclusivo.
+# 2. Reduce el ruido en PRs: 1 solo team como CODE OWNER review.
+# 3. Si backend-devs necesita apoyo de devops/ai-devs/qa, lo solicita
+#    MANUALMENTE como reviewer adicional (no CODE OWNER).
+# 4. En dev se requiere 1 CODE OWNER approval; los reviewers manuales
+#    adicionales (no CODE OWNER) no bloquean el merge.
+#
+# CODE OWNERS del repo: @spark-match/backend-devs
+#   Miembros actuales: ahincho, BriyitHT
 
-# =============================================================================
-# Política de aprobación
-# =============================================================================
-# - required_approving_review_count: 1
-# - require_code_owner_reviews: true
-# - dev: enforce_admins: false (permite hotfix de admin)
-# - main: enforce_admins: true (estricto)
-# - Para PRs cross-context (cambios en shared/, layers/, root template.yaml),
-#   se requiere review de CADA equipo afectado (CODEOWNERS los notifica).
-# - product-owners NO es CODE OWNER; se solicita manualmente al promover a main.
-# =============================================================================
-
-# =============================================================================
-# Catch-all: cualquier archivo no listado abajo requiere 1 aprobación
-# =============================================================================
-*                                       @spark-match/backend-devs
-
-# =============================================================================
-# Shared kernel: cambios afectan a TODOS los contextos
-# =============================================================================
-/shared/                                @spark-match/backend-devs @spark-match/ai-devs @spark-match/devops
-/shared/**/*                            @spark-match/backend-devs @spark-match/ai-devs @spark-match/devops
-
-# =============================================================================
-# Lambda Layers: cambios afectan a TODAS las Lambdas
-# =============================================================================
-/layers/                                @spark-match/backend-devs @spark-match/devops
-/layers/**/*                            @spark-match/backend-devs @spark-match/devops
-
-# =============================================================================
-# Bounded Contexts
-# =============================================================================
-# Identity: backend-devs owns
-/contexts/identity/                     @spark-match/backend-devs
-/contexts/identity/**/*                 @spark-match/backend-devs
-
-# Assessment: backend-devs owns
-/contexts/assessment/                   @spark-match/backend-devs
-/contexts/assessment/**/*               @spark-match/backend-devs
-
-# Career: backend-devs owns
-/contexts/career/                       @spark-match/backend-devs
-/contexts/career/**/*                   @spark-match/backend-devs
-
-# Matching: ai-devs owns (computo numerico, ML, embeddings)
-/contexts/matching/                     @spark-match/ai-devs
-/contexts/matching/**/*                 @spark-match/ai-devs
-
-# AI Advisor: NO existe aquí (vive en 08-deep-agent, repo separado)
-
-# =============================================================================
-# Event handlers (cross-cutting)
-# =============================================================================
-/events/                                @spark-match/backend-devs
-/events/**/*                            @spark-match/backend-devs
-
-# =============================================================================
-# CI/CD workflows y configuración de GitHub
-# =============================================================================
-/.github/workflows/                     @spark-match/devops
-/.github/workflows/**/*                 @spark-match/devops
-/.github/CODEOWNERS                     @spark-match/devops
-/.github/pull_request_template.md       @spark-match/devops
-
-# =============================================================================
-# Tests de integración / contract testing
-# =============================================================================
-/tests/integration/                     @spark-match/backend-devs @spark-match/qa
-/tests/contract/                        @spark-match/backend-devs @spark-match/qa
+# Catch-all: cualquier archivo es responsabilidad de backend-devs
+*       @spark-match/backend-devs
