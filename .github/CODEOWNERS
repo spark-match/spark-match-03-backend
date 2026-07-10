@@ -1,26 +1,34 @@
-# CODEOWNERS — Spark Match Backend (03-backend)
+# CODEOWNERS - Spark Match Backend (03)
 #
-# Política de aprobación (ADR-003 branch-based deployment):
-# - dev: 1 aprobación del CODE OWNER técnico (backend-devs) es suficiente.
-#   El autor NO puede aprobar su propio PR (regla GitHub). Si nadie más del
-#   team puede aprobar, solicitar manualmente un CODE OWNER de otro team
-#   (devops, ai-devs) como reviewer adicional.
-# - main: 1 CODE OWNER review (backend-devs) + reviewer manual de
-#   @spark-match/product-owners (solicitado por el autor al abrir el PR).
+# Politica de aprobacion (configurada en branch protection):
+#   - dev:  required_approving_review_count: 1
+#            require_code_owner_reviews: true
+#   - main: required_approving_review_count: 1
+#            require_code_owner_reviews: true
+#            require_last_push_approval: true
 #
-# ¿Por qué solo backend-devs (sin reglas granulares)?
-# 1. El repo es un monorepo donde TODO el código es responsabilidad de
-#    backend-devs (ahincho + BriyitHT), incluyendo workflows, layers, shared
-#    kernel y contexts. No hay sub-teams con ownership exclusivo.
-# 2. Reduce el ruido en PRs: 1 solo team como CODE OWNER review.
-# 3. Si backend-devs necesita apoyo de devops/ai-devs/qa para revisar
-#    cambios específicos (workflows, ML, tests), lo solicita MANUALMENTE
-#    como reviewer adicional (no CODE OWNER).
-# 4. En dev se requiere 1 CODE OWNER approval; los reviewers manuales
-#    adicionales (no CODE OWNER) no bloquean el merge.
+# CODE OWNER del repo (catch-all): @spark-match/backend-devs
+#   Miembros: ahincho, BriyitHT
 #
-# CODE OWNERS del repo: @spark-match/backend-devs
-#   Miembros actuales: ahincho, BriyitHT
+# Paths criticos (governance): @spark-match/product-owners
+#   - Decisiones arquitectonicas, onboarding, postmortems, docs raiz.
+#   - Miembros: dbarretol, FabiTaparaQuispe, ahincho
+#
+# Nota: el autor del PR no puede aprobar su propio PR, ni siquiera siendo
+# CODE OWNER (regla de GitHub). Por ejemplo, un PR abierto por ahincho
+# necesita la aprobacion de cualquier otro miembro del team.
 
-# Catch-all: cualquier archivo es responsabilidad de backend-devs
-*       @spark-match/backend-devs
+# =============================================================================
+# Catch-all: el equipo tecnico del repo es CODE OWNER del codigo
+# =============================================================================
+*                                          @spark-match/backend-devs
+
+# =============================================================================
+# Paths criticos: product-owners revisa governance y docs raiz
+# =============================================================================
+/decisions/                                @spark-match/product-owners
+/onboarding/                               @spark-match/product-owners
+/postmortems/                              @spark-match/product-owners
+/README.md                                 @spark-match/product-owners
+/CONTRIBUTING.md                           @spark-match/product-owners
+/LICENSE                                   @spark-match/product-owners
