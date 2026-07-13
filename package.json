@@ -1,0 +1,71 @@
+{
+  "name": "@spark-match/backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Spark Match backend - serverless DDD+EDA on AWS Lambda with TypeScript and Python",
+  "workspaces": [
+    "shared",
+    "contexts/*",
+    "events/*"
+  ],
+  "scripts": {
+    "build": "sam build",
+    "build:shared": "npm run build --workspace=@spark-match/shared",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write \"**/*.{ts,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,json,md,yaml,yml}\"",
+    "typecheck": "tsc --noEmit",
+    "typecheck:shared": "tsc --noEmit -p shared/tsconfig.json",
+    "local:api": "sam local start-api --port 3000",
+    "local:invoke": "sam local invoke",
+    "local:shell": "sam local start-lambda",
+    "layer:build:node-shared": "bash layers/node-shared/build.sh",
+    "layer:build:node-runtime": "bash layers/node-runtime/build.sh",
+    "layer:build:all": "npm run layer:build:node-shared && npm run layer:build:node-runtime"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "esbuild": "^0.23.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^7.1.0",
+    "@aws-lambda-powertools/idempotency": "^2.10.0",
+    "@aws-lambda-powertools/logger": "^2.10.0",
+    "@aws-lambda-powertools/metrics": "^2.10.0",
+    "@aws-lambda-powertools/parameters": "^2.10.0",
+    "@aws-lambda-powertools/tracer": "^2.10.0",
+    "@aws-sdk/client-eventbridge": "^3.665.0",
+    "@aws-sdk/client-secrets-manager": "^3.665.0",
+    "@middy/core": "^7.7.0",
+    "@middy/do-not-wait-for-empty-event-loop": "^7.7.0",
+    "@middy/http-cors": "^7.7.0",
+    "@middy/http-error-handler": "^7.7.0",
+    "@middy/http-header-normalizer": "^7.7.0",
+    "@middy/http-json-body-parser": "^7.7.0",
+    "@middy/validator": "^7.7.0",
+    "kysely": "^0.27.0",
+    "pg": "^8.12.0",
+    "pino": "^9.4.0",
+    "zod": "^3.23.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
