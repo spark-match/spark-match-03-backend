@@ -12,7 +12,7 @@
 - [ADR-005: EventBridge como bus principal de eventos](#adr-005-eventbridge-como-bus-principal-de-eventos)
 - [ADR-006: Coreografía + DLQ + idempotencia (sin orquestador)](#adr-006-coreografía--dlq--idempotencia-sin-orquestador)
 - [ADR-007: JSON Schema como contratos de eventos](#adr-007-json-schema-como-contratos-de-eventos)
-- [ADR-008: Aurora PostgreSQL con pgvector](#adr-008-aurora-postgresql-con-pgvector)
+- [ADR-008: Aurora PostgreSQL con pgvector](#adr-008-aurora-postgresql-con-pgvector) ← **reconsiderado 2026-07-13 (pgvector se mueve a vector store externo)**
 - [ADR-009: HTTP API Gateway v2 sobre REST API](#adr-009-http-api-gateway-v2-sobre-rest-api)
 - [ADR-010: Monorepo con npm workspaces](#adr-010-monorepo-con-npm-workspaces)
 - [ADR-011: Idempotencia por eventId en handlers async](#adr-011-idempotencia-por-eventid-en-handlers-async)
@@ -287,7 +287,9 @@ Productores y consumidores hablan lenguajes diferentes (TS vs Py). ¿Cómo garan
 
 ## ADR-008: Aurora PostgreSQL con pgvector
 
-**Estado**: Aceptado · **Fecha**: 2026-06-30
+**Estado**: Aceptado (reconsiderado) · **Fecha**: 2026-06-30 · **Reconsiderado**: 2026-07-13
+
+> **Actualización 2026-07-13**: Aurora Serverless v2 sigue siendo la base de datos relacional principal. Sin embargo, **la extensión `pgvector` se descarta**: la búsqueda vectorial se hará en un **proveedor especializado** (a definir en un ADR futuro). Mantenemos la decisión de una sola BD relacional, pero la columna `embeddings` se moverá a un servicio externo de vector store.
 
 ### Contexto
 
@@ -302,9 +304,13 @@ Necesitamos almacenar datos relacionales (usuarios, carreras, assessments) + emb
 | RDS MySQL + Pinecone | MySQL familiar | Vendor externo, datos fuera de AWS |
 | DynamoDB + FAISS | Serverless-native | No relacional, JOINs manuales |
 
-### Decisión
+### Decisión (original)
 
 **Aurora PostgreSQL Serverless v2** con extensión `pgvector`. Schemas lógicos por contexto (`identity`, `assessment`, `career`, `matching`, `ai`).
+
+### Decisión (revisada 2026-07-13)
+
+**Aurora PostgreSQL Serverless v2** (sin pgvector). Schemas lógicos por contexto (`identity`, `assessment`, `career`, `matching`, `ai`). El vector store será un servicio externo dedicado (TBD en nuevo ADR).
 
 ### Consecuencias
 
