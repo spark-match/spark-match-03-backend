@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # Lint, typecheck, tests (caller from 01-devops reusable workflows)
+  quality-checks:
+    uses: spark-match/01-devops/.github/workflows/quality-checks.yml@main
+    with:
+      working-directory: .
+      node-version: '20'
+      run-shared-tests: 'true'
+      run-contexts-tests: 'true'

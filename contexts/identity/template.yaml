@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Identity Context - Authentication, user registration, profile management.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  HttpApiId:
+    Type: String
+    Description: HTTP API Gateway ID (from root stack)
+  NodeSharedLayerArn:
+    Type: String
+  NodeRuntimeLayerArn:
+    Type: String
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 512
+    Timeout: 10
+    Tracing: Active
+    Layers:
+      - !Ref NodeSharedLayerArn
+      - !Ref NodeRuntimeLayerArn
+    Environment:
+      Variables:
+        POWERTOOLS_SERVICE_NAME: !Sub 'identity-${Environment}'
+        ENVIRONMENT: !Ref Environment
+        EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
+        DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
+        JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
+
+Resources:
+  IdentityRegisterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-register-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: register.handler
+      Description: Register a new user (POST /v1/auth/register)
+      Events:
+        RegisterApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiId
+            Path: /v1/auth/register
+            Method: POST
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Sub 'spark-match-events-${Environment}'
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub 'spark-match-${Environment}-*'
+
+  IdentityLoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-login-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: login.handler
+      Description: Login user (POST /v1/auth/login)
+      Events:
+        LoginApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiId
+            Path: /v1/auth/login
+            Method: POST
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+
+  IdentityGetMeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-get-me-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: get-me.handler
+      Description: Get current user (GET /v1/users/me)
+      Events:
+        GetMeApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiId
+            Path: /v1/users/me
+            Method: GET
+            Authorizer: NONE
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+
+Outputs:
+  IdentityRegisterFunctionArn:
+    Value: !GetAtt IdentityRegisterFunction.Arn
+  IdentityLoginFunctionArn:
+    Value: !GetAtt IdentityLoginFunction.Arn
+  IdentityGetMeFunctionArn:
+    Value: !GetAtt IdentityGetMeFunction.Arn

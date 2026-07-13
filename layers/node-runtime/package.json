@@ -1,0 +1,25 @@
+{
+  "name": "spark-match-node-runtime",
+  "version": "0.1.0",
+  "description": "Node.js runtime dependencies for Spark Match Lambdas (zod, middy, powertools, etc.)",
+  "private": true,
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^7.1.0",
+    "@aws-lambda-powertools/idempotency": "^2.10.0",
+    "@aws-lambda-powertools/logger": "^2.10.0",
+    "@aws-lambda-powertools/metrics": "^2.10.0",
+    "@aws-lambda-powertools/parameters": "^2.10.0",
+    "@aws-lambda-powertools/tracer": "^2.10.0",
+    "@middy/core": "^7.7.0",
+    "@middy/http-cors": "^7.7.0",
+    "@middy/do-not-wait-for-empty-event-loop": "^7.7.0",
+    "@middy/http-error-handler": "^7.7.0",
+    "@middy/http-json-body-parser": "^7.7.0",
+    "@middy/http-header-normalizer": "^7.7.0",
+    "@middy/validator": "^7.7.0",
+    "kysely": "^0.27.0",
+    "pg": "^8.12.0",
+    "pino": "^9.4.0",
+    "zod": "^3.23.0"
+  }
+}

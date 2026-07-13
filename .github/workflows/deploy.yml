@@ -1,0 +1,50 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared workspace
+        run: npm run build:shared
+
+      - name: Build Lambda Layers
+        run: npm run layer:build:all
+
+      - name: SAM Build
+        uses: aws/aws-actions-github-actions-for-sam@v1
+        with:
+          use-container: false
+
+      - name: SAM Deploy
+        uses: aws/aws-actions-github-actions-for-sam@v1
+        with:
+          use-container: false
+          command: deploy
+          args: --config-env ${{ inputs.environment }} --no-fail-on-empty-changeset --no-disable-rollback

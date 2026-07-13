@@ -1,0 +1,58 @@
+[project]
+name = "spark-match-backend"
+version = "0.1.0"
+description = "Spark Match backend - Python contexts (matching) and shared types"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.35.0",
+    "aws-lambda-powertools[boto3,tracer,logger,parameters,metrics,idempotency]>=2.40.0",
+    "kysely>=0.27.0",
+    "pydantic>=2.8.0",
+    "langchain-aws>=0.2.0",
+    "pgvector>=0.3.0",
+    "psycopg[binary]>=3.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+    "boto3-stubs[essential]>=1.35.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --strict-markers --tb=short"
+markers = [
+    "unit: unit tests (fast, no I/O)",
+    "integration: integration tests (requires AWS or LocalStack)",
+    "contract: contract tests (validates event schemas)",
+]

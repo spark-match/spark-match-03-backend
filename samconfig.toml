@@ -1,0 +1,46 @@
+version = 0.1
+
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "spark-match-backend-dev"
+s3_bucket = "spark-match-sam-artifacts-dev"
+s3_prefix = "spark-match-backend"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+image_repositories = []
+disable_rollback = false
+resolve_s3 = true
+resolve_image_repos = true
+save_params = true
+template_file = "template.yaml"
+
+[default.build]
+[default.build.parameters]
+use_container = false
+parallel = true
+build_in_source = false
+cached = true
+
+[default.local]
+[default.local.parameters]
+warm_containers = "EAGER"
+debug = true
+
+[prod]
+[prod.deploy]
+[prod.deploy.parameters]
+stack_name = "spark-match-backend-prod"
+s3_bucket = "spark-match-sam-artifacts-prod"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+disable_rollback = true
+resolve_s3 = true
+resolve_image_repos = true
+save_params = true
+parameter_overrides = [
+    "Environment=prod",
+    "LogRetentionInDays=365",
+]
