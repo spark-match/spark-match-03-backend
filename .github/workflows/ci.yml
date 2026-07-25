@@ -26,7 +26,7 @@ jobs:
       node-version: ${{ vars.DEFAULT_NODE_VERSION }}
       package-manager: ${{ vars.PACKAGE_MANAGER }}
       lockfile-name: ${{ vars.LOCKFILE_NAME }}
-      install-command: 'npm ci'
+      install-command: 'npm ci && npm run build:shared'
       test-command: 'npm run test:coverage'
       coverage-paths: 'coverage/lcov.info'
       fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
