@@ -123,13 +123,12 @@ describe('createSecretsReader', () => {
       expect(await reader.getRequiredString('p')).toBe('present');
     });
 
-    it('throws when the value is an empty string', async () => {
+    it('surfaces aws.unavailable when the underlying SecretString is empty', async () => {
       send.mockResolvedValue({ SecretString: '' });
       const reader = createSecretsReader();
       await expect(reader.getRequiredString('p')).rejects.toMatchObject({
-        statusCode: 500,
-        code: 'internal',
-        message: 'Required secret is empty: p',
+        statusCode: 503,
+        details: [{ code: 'aws.unavailable' }],
       });
     });
 
