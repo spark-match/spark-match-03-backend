@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const send = vi.fn();
-
 vi.mock('@aws-sdk/client-eventbridge', () => {
   const PutEventsCommand = vi.fn().mockImplementation((input: { Entries: unknown[] }) => ({ input }));
-  const EventBridgeClient = vi.fn().mockImplementation(() => ({ send }));
+  const EventBridgeClient = vi.fn().mockImplementation(() => ({ send: vi.fn() }));
   return { EventBridgeClient, PutEventsCommand };
 });
 
@@ -15,19 +13,29 @@ import type { DomainEvent } from './types.js';
 const mockedClient = vi.mocked(EventBridgeClient);
 const mockedCommand = vi.mocked(PutEventsCommand);
 
+type Send = ReturnType<typeof vi.fn>;
+let send: Send;
+
+function buildPublisher(busArn = 'arn:aws:events:us-east-1:123:rule/foo'): ReturnType<typeof createEventBridgeClient> {
+  const publisher = createEventBridgeClient({ busArn });
+  const instance = mockedClient.mock.instances[mockedClient.mock.instances.length - 1] as { send: Send };
+  send = instance.send;
+  return publisher;
+}
+
 function makeEvent(): DomainEvent {
   return makeDomainEvent('test.source', 'TestEvent', { foo: 'bar' });
 }
 
 beforeEach(() => {
-  send.mockReset();
   mockedClient.mockClear();
   mockedCommand.mockClear();
+  send = vi.fn();
 });
 
 describe('createEventBridgeClient', () => {
   it('instantiates EventBridgeClient with the provided region', () => {
-    createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo', region: 'us-east-1' });
+    buildPublisher();
     expect(mockedClient).toHaveBeenCalledWith({ region: 'us-east-1' });
   });
 
@@ -43,14 +51,14 @@ describe('createEventBridgeClient', () => {
 
   it('instantiates EventBridgeClient without args when no region is available', () => {
     delete process.env.AWS_REGION;
-    createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+    buildPublisher();
     expect(mockedClient).toHaveBeenCalledWith({});
   });
 
   describe('publish', () => {
     it('sends a single entry wrapped in PutEventsCommand', async () => {
       send.mockResolvedValue({ FailedEntryCount: 0, Entries: [] });
-      const publisher = createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+      const publisher = buildPublisher();
 
       await publisher.publish(makeEvent());
 
@@ -72,7 +80,7 @@ describe('createEventBridgeClient', () => {
           Entries: [{ ErrorCode: 'Throttling', ErrorMessage: 'rate exceeded' }],
         })
         .mockResolvedValueOnce({ FailedEntryCount: 0, Entries: [] });
-      const publisher = createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+      const publisher = buildPublisher();
 
       await publisher.publish(makeEvent());
 
@@ -81,7 +89,7 @@ describe('createEventBridgeClient', () => {
 
     it('throws the last error after exhausting retries', async () => {
       send.mockRejectedValue(new Error('boom'));
-      const publisher = createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+      const publisher = buildPublisher();
 
       await expect(publisher.publish(makeEvent())).rejects.toThrow('boom');
       expect(send).toHaveBeenCalledTimes(3);
@@ -92,7 +100,7 @@ describe('createEventBridgeClient', () => {
         FailedEntryCount: 1,
         Entries: [{ ErrorCode: 'X', ErrorMessage: 'y' }],
       });
-      const publisher = createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+      const publisher = buildPublisher();
 
       await expect(publisher.publish(makeEvent())).rejects.toThrow(/Partial batch failure: X: y/);
       expect(send).toHaveBeenCalledTimes(3);
@@ -100,7 +108,7 @@ describe('createEventBridgeClient', () => {
 
     it('falls back to "unknown" when the failure has no entry error code', async () => {
       send.mockResolvedValue({ FailedEntryCount: 1, Entries: [] });
-      const publisher = createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+      const publisher = buildPublisher();
 
       await expect(publisher.publish(makeEvent())).rejects.toThrow(/Partial batch failure: unknown/);
     });
@@ -109,7 +117,7 @@ describe('createEventBridgeClient', () => {
   describe('publishMany', () => {
     it('chunks events into batches of 10', async () => {
       send.mockResolvedValue({ FailedEntryCount: 0, Entries: [] });
-      const publisher = createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+      const publisher = buildPublisher();
 
       const events = Array.from({ length: 25 }, () => makeEvent());
       await publisher.publishMany(events);
@@ -122,14 +130,14 @@ describe('createEventBridgeClient', () => {
     });
 
     it('does not call PutEventsCommand when the event list is empty', async () => {
-      const publisher = createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+      const publisher = buildPublisher();
       await publisher.publishMany([]);
       expect(send).not.toHaveBeenCalled();
     });
 
     it('retries the failing chunk and surfaces the error', async () => {
       send.mockRejectedValue(new Error('chunks fail'));
-      const publisher = createEventBridgeClient({ busArn: 'arn:aws:events:us-east-1:123:rule/foo' });
+      const publisher = buildPublisher();
 
       await expect(publisher.publishMany([makeEvent(), makeEvent()])).rejects.toThrow('chunks fail');
     });

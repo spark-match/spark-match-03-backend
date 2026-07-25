@@ -19,7 +19,7 @@ describe('validatePayload', () => {
       caught = err;
     }
     expect(caught).toBeInstanceOf(ApiError);
-    expect((caught as ApiError).code).toBe('bad_request');
+    expect((caught as ApiError).code).toBe('validation.failed');
     expect((caught as ApiError).statusCode).toBe(400);
   });
 
