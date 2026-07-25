@@ -1,0 +1,30 @@
+name: Test Sonar
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  test-sonar:
+    uses: spark-match/spark-match-01-devops/.github/workflows/sonar-typescript.yml@main
+    with:
+      project-key: spark-match-03-backend
+      project-name: Spark Match - Backend
+      organization: ahincho
+      sources: contexts,shared,events,layers
+      tests: '**/*.test.ts'
+      exclude-patterns: '**/dist/**,**/node_modules/**,**/coverage/**,**/.aws-sam/**,**/*.d.ts'
+      working-directory: '.'
+      env: 'ci'
+      node-version: '24'
+      package-manager: 'npm'
+      lockfile-name: 'package-lock.json'
+      install-command: 'npm ci'
+      test-command: 'npm run test:coverage'
+      coverage-paths: 'coverage/lcov.info'
+      fail-on-quality-gate: false
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
