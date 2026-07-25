@@ -50,17 +50,15 @@ export function createSsmReader(defaultMaxAge = DEFAULT_MAX_AGE_SECONDS): SsmRea
     },
 
     invalidate(name?: string): void {
-      try {
-        if (name) {
-          void getParameter(name, { forceFetch: true });
-        } else {
-          // No name provided: nothing to invalidate locally. The cache is
-          // owned by Powertools; this hook is a placeholder for symmetry
-          // with the previous interface and a future bulk flush.
-        }
-      } catch {
-        // Best-effort; ignore errors here.
+      if (name) {
+        getParameter(name, { forceFetch: true }).catch(() => {
+          // Best-effort; ignore errors here.
+        });
+        return;
       }
+      // No name provided: nothing to invalidate locally. The cache is
+      // owned by Powertools; this hook is a placeholder for symmetry
+      // with the previous interface and a future bulk flush.
     },
   };
 }
