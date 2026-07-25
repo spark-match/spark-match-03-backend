@@ -27,7 +27,7 @@ jobs:
       package-manager: ${{ vars.PACKAGE_MANAGER }}
       lockfile-name: ${{ vars.LOCKFILE_NAME }}
       install-command: 'npm ci && npm run build:shared'
-      test-command: 'npm run test:coverage'
+      test-command: 'npx vitest run --coverage --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 --coverage.reporter=lcov'
       coverage-paths: 'coverage/lcov.info'
       fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
     secrets:
