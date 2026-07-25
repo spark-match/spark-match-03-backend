@@ -81,7 +81,8 @@ describe('createSecretsReader', () => {
 
       await expect(reader.get('missing')).rejects.toBeInstanceOf(ApiError);
       await expect(reader.get('missing')).rejects.toMatchObject({
-        code: 'aws.unavailable',
+        statusCode: 503,
+        details: [{ code: 'aws.unavailable' }],
       });
     });
 
@@ -90,8 +91,9 @@ describe('createSecretsReader', () => {
       const reader = createSecretsReader();
 
       await expect(reader.get('boom')).rejects.toMatchObject({
-        code: 'aws.unavailable',
-        meta: { dependency: 'Secrets Manager' },
+        statusCode: 503,
+        code: 'service_unavailable',
+        details: [{ code: 'aws.unavailable', meta: { dependency: 'Secrets Manager' } }],
       });
     });
 
@@ -126,6 +128,7 @@ describe('createSecretsReader', () => {
       const reader = createSecretsReader();
       await expect(reader.getRequiredString('p')).rejects.toMatchObject({
         statusCode: 500,
+        code: 'internal',
         message: 'Required secret is empty: p',
       });
     });
@@ -134,7 +137,8 @@ describe('createSecretsReader', () => {
       send.mockRejectedValue(new Error('boom'));
       const reader = createSecretsReader();
       await expect(reader.getRequiredString('p')).rejects.toMatchObject({
-        code: 'aws.unavailable',
+        statusCode: 503,
+        details: [{ code: 'aws.unavailable' }],
       });
     });
   });
@@ -155,8 +159,8 @@ describe('createSecretsReader', () => {
     it('drops every entry when called without an id', async () => {
       send
         .mockResolvedValueOnce({ SecretString: 'a1' })
-        .mockResolvedValueOnce({ SecretString: 'a2' })
-        .mockResolvedValueOnce({ SecretString: 'b1' });
+        .mockResolvedValueOnce({ SecretString: 'b1' })
+        .mockResolvedValueOnce({ SecretString: 'a2' });
       const reader = createSecretsReader();
 
       expect(await reader.get('a')).toBe('a1');
