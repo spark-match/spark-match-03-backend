@@ -64,7 +64,7 @@ export async function requireAuth(event: unknown, logger: Logger): Promise<AuthC
   const authHeader =
     headers['authorization'] ?? headers['Authorization'] ?? headers['AUTHORIZATION'];
 
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     logger.warn('Missing or invalid authorizer context AND no Bearer header', { path });
     throw ApiError.unauthorized('Missing or invalid authentication');
   }
