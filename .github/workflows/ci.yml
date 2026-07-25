@@ -29,6 +29,6 @@ jobs:
       install-command: 'npm ci'
       test-command: 'npm run test:coverage'
       coverage-paths: 'coverage/lcov.info'
-      fail-on-quality-gate: false
+      fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
