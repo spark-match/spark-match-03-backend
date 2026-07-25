@@ -4,9 +4,15 @@ export interface User {
   fullName: string;
   passwordHash: string;
   age: number | null;
+  role: UserRole;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type UserRole = 'admin';
+
+export const USER_ROLES: readonly UserRole[] = ['admin'];
 
 export type CreateUserInput = {
   email: string;
