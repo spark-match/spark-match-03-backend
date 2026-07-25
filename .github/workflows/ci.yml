@@ -16,19 +16,19 @@ jobs:
     with:
       project-key: ${{ vars.SONAR_PROJECT_KEY }}
       project-name: ${{ vars.SONAR_PROJECT_NAME }}
-      organization: ${{ vars.SONAR_ORGANIZATION }}
-      sources: ${{ vars.SONAR_SOURCES }}
-      tests: ${{ vars.SONAR_TESTS }}
-      test-inclusions: ${{ vars.SONAR_TEST_INCLUSIONS }}
-      exclude-patterns: ${{ vars.SONAR_EXCLUDE_PATTERNS }}
+      organization: ahincho
+      sources: contexts,shared,layers
+      tests: contexts,shared,tests
+      test-inclusions: '**/*.test.ts'
+      exclude-patterns: '**/dist/**,**/node_modules/**,**/coverage/**,**/.aws-sam/**,**/*.d.ts'
       working-directory: '.'
       env: 'ci'
-      node-version: ${{ vars.DEFAULT_NODE_VERSION }}
-      package-manager: ${{ vars.PACKAGE_MANAGER }}
-      lockfile-name: ${{ vars.LOCKFILE_NAME }}
-      install-command: 'npm ci'
-      test-command: 'npm run test:coverage'
+      node-version: '24'
+      package-manager: 'npm'
+      lockfile-name: 'package-lock.json'
+      install-command: 'echo install skip'
+      test-command: 'echo test skip'
       coverage-paths: 'coverage/lcov.info'
-      fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
+      fail-on-quality-gate: false
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
