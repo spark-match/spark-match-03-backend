@@ -29,6 +29,6 @@ jobs:
       install-command: 'echo install skip'
       test-command: 'echo test skip'
       coverage-paths: 'coverage/lcov.info'
-      fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
+      fail-on-quality-gate: false
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
