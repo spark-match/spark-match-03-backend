@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockFindById = vi.fn();
-const mockBuildContext = vi.fn();
+const { mockFindById, mockBuildContext } = vi.hoisted(() => ({
+  mockFindById: vi.fn(),
+  mockBuildContext: vi.fn(),
+}));
 
 vi.mock('../composition.js', () => ({
   buildContext: mockBuildContext,
