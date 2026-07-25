@@ -43,7 +43,7 @@ function makeEvent(overrides: Partial<APIGatewayProxyEventV2> = {}): APIGatewayP
       time: '01/Jan/2026:00:00:00 +0000',
       timeEpoch: 0,
     } as APIGatewayProxyEventV2['requestContext'],
-    body: '',
+    body: undefined,
     isBase64Encoded: false,
     ...overrides,
   } as APIGatewayProxyEventV2;
