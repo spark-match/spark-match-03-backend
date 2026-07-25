@@ -11,6 +11,9 @@ vi.mock('../composition.js', () => ({
 
 vi.mock('@aws-lambda-powertools/tracer', () => ({
   Tracer: class {
+    isTracingEnabled() {
+      return false;
+    }
     getSegment() {
       return { addNewSubsegment: () => ({ close: () => {} }) };
     }
