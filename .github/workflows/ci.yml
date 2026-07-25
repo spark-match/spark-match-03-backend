@@ -10,25 +10,38 @@ permissions:
   contents: read
   pull-requests: read
 
+env:
+  SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+  SONAR_PROJECT_NAME: ${{ vars.SONAR_PROJECT_NAME }}
+  SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+  SONAR_SOURCES: ${{ vars.SONAR_SOURCES }}
+  SONAR_TESTS: ${{ vars.SONAR_TESTS }}
+  SONAR_TEST_INCLUSIONS: ${{ vars.SONAR_TEST_INCLUSIONS }}
+  SONAR_EXCLUDE_PATTERNS: ${{ vars.SONAR_EXCLUDE_PATTERNS }}
+  DEFAULT_NODE_VERSION: ${{ vars.DEFAULT_NODE_VERSION }}
+  PACKAGE_MANAGER: ${{ vars.PACKAGE_MANAGER }}
+  LOCKFILE_NAME: ${{ vars.LOCKFILE_NAME }}
+  SONAR_FAIL_ON_QUALITY_GATE: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
+
 jobs:
   sonar:
     uses: spark-match/spark-match-01-devops/.github/workflows/sonar-typescript.yml@main
     with:
-      project-key: ${{ vars.SONAR_PROJECT_KEY }}
-      project-name: Spark Match - Backend
-      organization: ahincho
-      sources: contexts,shared,events,layers
-      tests: contexts,shared,tests
-      test-inclusions: '**/*.test.ts'
-      exclude-patterns: '**/dist/**,**/node_modules/**,**/coverage/**,**/.aws-sam/**,**/*.d.ts'
+      project-key: ${{ env.SONAR_PROJECT_KEY }}
+      project-name: ${{ env.SONAR_PROJECT_NAME }}
+      organization: ${{ env.SONAR_ORGANIZATION }}
+      sources: ${{ env.SONAR_SOURCES }}
+      tests: ${{ env.SONAR_TESTS }}
+      test-inclusions: ${{ env.SONAR_TEST_INCLUSIONS }}
+      exclude-patterns: ${{ env.SONAR_EXCLUDE_PATTERNS }}
       working-directory: '.'
       env: 'ci'
-      node-version: '24'
-      package-manager: 'npm'
-      lockfile-name: 'package-lock.json'
+      node-version: ${{ env.DEFAULT_NODE_VERSION }}
+      package-manager: ${{ env.PACKAGE_MANAGER }}
+      lockfile-name: ${{ env.LOCKFILE_NAME }}
       install-command: 'npm ci'
       test-command: 'npm run test:coverage'
       coverage-paths: 'coverage/lcov.info'
-      fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
+      fail-on-quality-gate: ${{ env.SONAR_FAIL_ON_QUALITY_GATE }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
