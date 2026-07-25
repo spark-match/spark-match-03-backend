@@ -19,7 +19,7 @@ mkdir -p "${LAYER_DIR}/nodejs/node_modules/@spark-match/shared/node_modules"
 # Compile TypeScript
 echo "==> Compiling TypeScript"
 cd "${BACKEND_ROOT}/shared"
-npx tsc
+./node_modules/.bin/tsc
 
 # Copy compiled JS + types to layer
 echo "==> Copying compiled output to layer"
