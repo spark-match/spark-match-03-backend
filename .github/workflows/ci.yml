@@ -19,6 +19,7 @@ jobs:
       organization: ${{ vars.SONAR_ORGANIZATION }}
       sources: ${{ vars.SONAR_SOURCES }}
       tests: ${{ vars.SONAR_TESTS }}
+      test-inclusions: ${{ vars.SONAR_TEST_INCLUSIONS }}
       exclude-patterns: ${{ vars.SONAR_EXCLUDE_PATTERNS }}
       working-directory: '.'
       env: 'ci'
