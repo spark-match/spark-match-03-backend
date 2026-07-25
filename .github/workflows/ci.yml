@@ -24,11 +24,11 @@ jobs:
       working-directory: '.'
       env: 'ci'
       node-version: ${{ vars.DEFAULT_NODE_VERSION }}
-      package-manager: 'npm'
-      lockfile-name: 'package-lock.json'
-      install-command: 'echo install skip'
-      test-command: 'echo test skip'
+      package-manager: ${{ vars.PACKAGE_MANAGER }}
+      lockfile-name: ${{ vars.LOCKFILE_NAME }}
+      install-command: 'npm ci'
+      test-command: 'npm run test:coverage'
       coverage-paths: 'coverage/lcov.info'
-      fail-on-quality-gate: false
+      fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
