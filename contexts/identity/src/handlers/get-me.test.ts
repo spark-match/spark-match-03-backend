@@ -103,6 +103,6 @@ describe('GET /me handler', () => {
 
     expect(result.statusCode).toBe(404);
     const body = JSON.parse(result.body) as { error: { code: string } };
-    expect(body.error.code).toBe('user_not_found');
+    expect(body.error.code).toBe('not_found');
   });
 });
