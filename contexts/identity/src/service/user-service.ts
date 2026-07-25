@@ -1,5 +1,5 @@
 import { ApiError } from '@spark-match/shared/http';
-import type { EventPublisher } from '@spark-match/shared/events';
+import { makeDomainEvent, type EventPublisher } from '@spark-match/shared/events';
 import { hashPassword, verifyPassword } from '@spark-match/shared/auth';
 import type { UserRepository } from '../infra/user-repository.js';
 import type { User } from '../domain/user.js';
@@ -24,9 +24,9 @@ export function createUserService(deps: {
     async register({ email, password, fullName, age }) {
       const exists = await deps.userRepository.existsByEmail(email);
       if (exists) {
-        throw ApiError.conflict('Email already registered');
+        throw ApiError.emailTaken(email);
       }
-      const passwordHash = hashPassword(password);
+      const passwordHash = await hashPassword(password);
       const user = await deps.userRepository.create({
         email,
         fullName,
@@ -42,11 +42,9 @@ export function createUserService(deps: {
         occurredAt: new Date().toISOString(),
       };
 
-      await deps.eventPublisher.publish({
-        source: 'spark-match.identity',
-        detailType: 'UserRegistered',
-        detail: event,
-      });
+      await deps.eventPublisher.publish(
+        makeDomainEvent('spark-match.identity', 'UserRegistered', event, 1),
+      );
 
       return user;
     },
@@ -54,11 +52,11 @@ export function createUserService(deps: {
     async authenticate(email, password) {
       const user = await deps.userRepository.findByEmail(email);
       if (!user) {
-        throw ApiError.unauthorized('Invalid credentials');
+        throw ApiError.invalidCredentials();
       }
-      const valid = verifyPassword(password, user.passwordHash);
+      const valid = await verifyPassword(password, user.passwordHash);
       if (!valid) {
-        throw ApiError.unauthorized('Invalid credentials');
+        throw ApiError.invalidCredentials();
       }
       return user;
     },
