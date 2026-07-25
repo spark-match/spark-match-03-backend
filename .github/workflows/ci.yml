@@ -23,7 +23,7 @@ jobs:
       exclude-patterns: ${{ vars.SONAR_EXCLUDE_PATTERNS }}
       working-directory: '.'
       env: 'ci'
-      node-version: '24'
+      node-version: ${{ vars.DEFAULT_NODE_VERSION }}
       package-manager: 'npm'
       lockfile-name: 'package-lock.json'
       install-command: 'echo install skip'
