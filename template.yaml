@@ -22,7 +22,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs24.x
     MemorySize: 512
     Timeout: 15
     Tracing: Active
@@ -92,7 +92,7 @@ Resources:
       Description: Shared TS utilities (auth, http, logger, events, infra, templates)
       ContentUri: ./layers/node-shared/dist
       CompatibleRuntimes:
-        - nodejs20.x
+        - nodejs24.x
       RetentionPolicy: Retain
 
   NodeRuntimeLayer:
@@ -102,7 +102,7 @@ Resources:
       Description: Node runtime deps (zod, ajv, middy, powertools, kysely, pg)
       ContentUri: ./layers/node-runtime
       CompatibleRuntimes:
-        - nodejs20.x
+        - nodejs24.x
       RetentionPolicy: Retain
 
   # ===========================================================================
