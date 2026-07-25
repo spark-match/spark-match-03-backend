@@ -15,8 +15,8 @@ jobs:
       project-key: spark-match-03-backend
       project-name: Spark Match - Backend
       organization: ahincho
-      sources: contexts,shared,events,layers
-      tests: contexts,shared,events,tests
+      sources: contexts,shared,layers
+      tests: contexts,shared,tests
       test-inclusions: '**/*.test.ts'
       exclude-patterns: '**/dist/**,**/node_modules/**,**/coverage/**,**/.aws-sam/**,**/*.d.ts'
       working-directory: '.'
