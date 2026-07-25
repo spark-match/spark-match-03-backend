@@ -46,9 +46,12 @@ describe('userService.register', () => {
         source: 'spark-match.identity',
         detailType: 'UserRegistered',
         detail: expect.objectContaining({
-          schemaVersion: '1.0',
-          userId: 'u-1',
-          email: 'test@example.com',
+          version: 1,
+          data: expect.objectContaining({
+            schemaVersion: '1.0',
+            userId: 'u-1',
+            email: 'test@example.com',
+          }),
         }),
       }),
     );
@@ -77,7 +80,7 @@ describe('userService.register', () => {
     });
 
     const call = deps.userRepository.create.mock.calls[0]![0];
-    expect(call.passwordHash).toMatch(/^scrypt\$/);
+    expect(call.passwordHash).toMatch(/^scrypt\$\d+\$\d+\$\d+\$/);
     expect(call.passwordHash).not.toBe('plainPass123');
   });
 });
@@ -85,7 +88,7 @@ describe('userService.register', () => {
 describe('userService.authenticate', () => {
   it('returns user when credentials match', async () => {
     const { hashPassword } = await import('@spark-match/shared/auth');
-    const passwordHash = hashPassword('correctPass123');
+    const passwordHash = await hashPassword('correctPass123');
     const deps = makeDeps();
     deps.userRepository.findByEmail.mockResolvedValue({
       id: 'u-1',
@@ -114,7 +117,7 @@ describe('userService.authenticate', () => {
 
   it('throws 401 when password is wrong', async () => {
     const { hashPassword } = await import('@spark-match/shared/auth');
-    const passwordHash = hashPassword('correctPass123');
+    const passwordHash = await hashPassword('correctPass123');
     const deps = makeDeps();
     deps.userRepository.findByEmail.mockResolvedValue({
       id: 'u-1',
