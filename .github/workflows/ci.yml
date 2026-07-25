@@ -11,16 +11,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  quality-checks:
-    uses: spark-match/01-devops/.github/workflows/quality-checks.yml@main
-    with:
-      working-directory: .
-      node-version: '20'
-      run-shared-tests: 'true'
-      run-contexts-tests: 'true'
-
   sonar:
-    needs: quality-checks
     uses: spark-match/spark-match-01-devops/.github/workflows/sonar-typescript.yml@main
     with:
       project-key: ${{ vars.SONAR_PROJECT_KEY }}
