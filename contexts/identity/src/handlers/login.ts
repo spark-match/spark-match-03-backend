@@ -21,7 +21,13 @@ export const handler = buildHandler<LoginInput, LoginOutput>({
       throw new Error('JWT_SECRET_ARN env var is not set');
     }
     const jwtSecret = await secrets.get(jwtSecretArn);
-    const accessToken = signJwt({ sub: user.id, email: user.email }, jwtSecret, '24h');
+    const secretBytes = new TextEncoder().encode(jwtSecret);
+    const accessToken = await signJwt(secretBytes, {
+      subject: user.id,
+      email: user.email,
+      role: 'admin',
+      expiresInSeconds: 86400,
+    });
 
     ctx.logger.info('User logged in', { userId: user.id });
 
