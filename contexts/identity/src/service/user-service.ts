@@ -64,8 +64,8 @@ export interface UserService {
   getUser(input: ActorTarget): Promise<User>;
   changePassword(input: ActorTarget & { newPassword: string }): Promise<void>;
   updateUser(input: ActorTarget & { changes: UpdateUserInput }): Promise<User>;
-  deactivateUser(input: ActorTarget): Promise<void>;
-  activateUser(input: ActorTarget): Promise<void>;
+  deactivateUser(input: ActorTarget): Promise<User>;
+  activateUser(input: ActorTarget): Promise<User>;
   listUsers(input: ListUsersInput): Promise<ListUsersResult>;
 }
 
@@ -246,10 +246,9 @@ export function createUserService(deps: {
       }
       const target = await loadAuthorizedTarget(actor, targetUserId);
       if (!target.active) {
-        // Idempotent: already deactivated, no-op (no event, no write).
-        return;
+        return target;
       }
-      await deps.userRepository.setActive(target.id, false);
+      const updated = await deps.userRepository.setActive(target.id, false);
 
       const event: UserDeactivatedEvent = {
         schemaVersion: '1.0',
@@ -259,15 +258,16 @@ export function createUserService(deps: {
       await deps.eventPublisher.publish(
         makeDomainEvent(SOURCE, 'UserDeactivated', event, 1),
       );
+      return updated;
     },
 
     async activateUser({ actorUserId, targetUserId }) {
       const actor = await loadActor(actorUserId);
       const target = await loadAuthorizedTarget(actor, targetUserId);
       if (target.active) {
-        return;
+        return target;
       }
-      await deps.userRepository.setActive(target.id, true);
+      const updated = await deps.userRepository.setActive(target.id, true);
 
       const event: UserActivatedEvent = {
         schemaVersion: '1.0',
@@ -277,6 +277,7 @@ export function createUserService(deps: {
       await deps.eventPublisher.publish(
         makeDomainEvent(SOURCE, 'UserActivated', event, 1),
       );
+      return updated;
     },
 
     async listUsers({ actorUserId, filters }) {
