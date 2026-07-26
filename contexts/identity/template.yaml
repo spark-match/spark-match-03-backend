@@ -89,6 +89,11 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-deactivate-user-${Environment}'
       RetentionInDays: 14
+  IdentityUpdateUserLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-update-user-${Environment}'
+      RetentionInDays: 14
 
   IdentityRegisterFunction:
     Type: AWS::Serverless::Function
@@ -288,6 +293,32 @@ Resources:
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
+  IdentityUpdateUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-update-user-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: update-user.handler
+      Description: Update user (PATCH /v1/users/{userId}) - admin only
+      Events:
+        UpdateUserApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiId
+            Path: /v1/users/{userId}
+            Method: PATCH
+            Authorizer: NONE
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Sub 'spark-match-events-${Environment}'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
   # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
   # ===========================================================================
@@ -345,5 +376,7 @@ Outputs:
     Value: !GetAtt IdentityActivateUserFunction.Arn
   IdentityDeactivateUserFunctionArn:
     Value: !GetAtt IdentityDeactivateUserFunction.Arn
+  IdentityUpdateUserFunctionArn:
+    Value: !GetAtt IdentityUpdateUserFunction.Arn
   IdentityMigrateFunctionArn:
     Value: !GetAtt IdentityMigrateFunction.Arn
