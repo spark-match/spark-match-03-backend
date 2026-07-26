@@ -59,6 +59,12 @@ interface ResponseLike {
 
 const asResponse = (r: unknown): ResponseLike => r as ResponseLike;
 
+function parseBody(body: unknown): unknown {
+  if (body === null || body === undefined) return {};
+  if (typeof body === 'string') return JSON.parse(body) as unknown;
+  return body;
+}
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Correlation-Id',
@@ -84,7 +90,7 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
     const resp = asResponse(request.response);
     const headers = (resp.headers ?? {}) as Record<string, string>;
     for (const [k, v] of Object.entries(CORS_HEADERS)) {
-      if (headers[k] === undefined) headers[k] = v;
+      headers[k] ??= v;
     }
     resp.headers = headers;
   };
@@ -97,7 +103,6 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
           headers: { ...CORS_HEADERS },
           body: '',
         } as unknown as APIGatewayProxyResultV2;
-        return;
       }
     },
     after: async (request) => {
@@ -120,13 +125,7 @@ export function buildHandler<TInput, TOutput>(
   const baseHandler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
     const requestId = event.requestContext?.requestId ?? 'unknown';
     try {
-      const body = event.body;
-      const rawBody =
-        body === null || body === undefined
-          ? {}
-          : typeof body === 'string'
-            ? (JSON.parse(body) as unknown)
-            : body;
+      const rawBody = parseBody(event.body);
       const input = validatePayload(config.inputSchema, rawBody) as TInput;
       const auth = config.requireAuth ? await requireAuth(event, config.logger) : undefined;
       const result = await config.handler(input, event, auth);

@@ -25,9 +25,15 @@
     "local:shell": "sam local start-lambda",
     "layer:build:node-shared": "bash layers/node-shared/build.sh",
     "layer:build:node-runtime": "bash layers/node-runtime/build.sh",
-    "layer:build:all": "npm run layer:build:node-shared && npm run layer:build:node-runtime"
+    "layer:build:all": "npm run layer:build:node-shared && npm run layer:build:node-runtime",
+    "migrate:create": "node-pg-migrate create --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public -- --helper false",
+    "migrate:up": "node-pg-migrate up --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
+    "migrate:down": "node-pg-migrate down --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
+    "migrate:redo": "node-pg-migrate redo --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
+    "migrate:status": "node-pg-migrate status --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public"
   },
   "devDependencies": {
+    "@aws-sdk/client-ssm": "^3.1095.0",
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.11.6",
@@ -37,6 +43,7 @@
     "esbuild": "^0.23.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
+    "node-pg-migrate": "^9.0.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0",
     "vite-tsconfig-paths": "^6.1.1",

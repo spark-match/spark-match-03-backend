@@ -1,7 +1,6 @@
 import { buildHandler } from '@spark-match/shared/templates';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import { createLogger } from '@spark-match/shared/logger';
-import { ApiError } from '@spark-match/shared/http';
 import { buildContext } from '../composition.js';
 import { RegisterInputSchema, type RegisterInput, type RegisterOutput } from '../schemas/register.schema.js';
 
@@ -22,5 +21,3 @@ export const handler = buildHandler<RegisterInput, RegisterOutput>({
     };
   },
 });
-
-export const _throw = ApiError;

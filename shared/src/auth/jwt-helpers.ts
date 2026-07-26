@@ -50,7 +50,7 @@ export async function signJwt(secret: Uint8Array, options: SignOptions): Promise
   return new SignJWT({
     email: options.email,
     role: options.role,
-    ...(options.extraClaims ?? {}),
+    ...options.extraClaims,
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(options.subject)

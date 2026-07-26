@@ -5,8 +5,8 @@ vi.mock('@aws-lambda-powertools/parameters/ssm', () => ({
 }));
 
 import { getParameter } from '@aws-lambda-powertools/parameters/ssm';
-import { createSsmReader } from '../../src/infra/ssm-reader.js';
-import { ApiError } from '../../src/http/api-error.js';
+import { createSsmReader } from './ssm-reader.js';
+import { ApiError } from '../http/api-error.js';
 
 const mockedGetParameter = vi.mocked(getParameter);
 
@@ -78,8 +78,13 @@ describe('createSsmReader.getString', () => {
     await expect(reader.getString('name')).rejects.toBeInstanceOf(ApiError);
     await expect(reader.getString('name')).rejects.toMatchObject({
       statusCode: 503,
-      code: 'aws.unavailable',
-      meta: { dependency: 'SSM' },
+      code: 'service_unavailable',
+      details: [
+        {
+          code: 'aws.unavailable',
+          meta: { dependency: 'SSM' },
+        },
+      ],
     });
   });
 
@@ -114,7 +119,8 @@ describe('createSsmReader.getRequiredString', () => {
     const reader = createSsmReader();
 
     await expect(reader.getRequiredString('p')).rejects.toMatchObject({
-      code: 'aws.unavailable',
+      code: 'service_unavailable',
+      details: [{ code: 'aws.unavailable' }],
     });
   });
 });
