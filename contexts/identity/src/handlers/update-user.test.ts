@@ -135,7 +135,7 @@ describe('PATCH /users/{userId} handler', () => {
 
   it('rejects missing userId path parameter with 400', async () => {
     const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
-      withAuth(makeEvent(null, { fullName: 'X' })),
+      withAuth(makeEvent(null, { fullName: 'Valid Name' })),
     )) as { statusCode: number; body: string };
 
     expect(result.statusCode).toBe(400);
