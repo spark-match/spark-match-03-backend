@@ -187,3 +187,5 @@ Outputs:
     Value: !Join [',', !Ref VpcSecurityGroupIds]
     Export:
       Name: !Sub 'spark-match-${Environment}-IdentityStackVpcSecurityGroupIds'
+
+# canary
