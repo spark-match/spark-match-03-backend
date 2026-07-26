@@ -4,11 +4,18 @@ import { createLogger } from '@spark-match/shared/logger';
 import { ApiError } from '@spark-match/shared/http';
 import { z } from 'zod';
 import { buildContext } from '../composition.js';
-import { toPublicUser, type PublicUser } from '../domain/user.js';
 
 const GetMeInputSchema = z.object({});
 
-export const handler = buildHandler<unknown, PublicUser>({
+export interface GetMeOutput {
+  id: string;
+  email: string;
+  fullName: string;
+  age: number | null;
+  createdAt: string;
+}
+
+export const handler = buildHandler<unknown, GetMeOutput>({
   name: 'identity-get-me',
   inputSchema: GetMeInputSchema,
   logger: createLogger('identity-get-me'),
@@ -19,10 +26,17 @@ export const handler = buildHandler<unknown, PublicUser>({
       throw ApiError.unauthorized('Missing authentication');
     }
     const ctx = await buildContext();
-    const user = await ctx.userService.getUser({
-      actorUserId: auth.userId,
-      targetUserId: auth.userId,
-    });
-    return toPublicUser(user);
+    const user = await ctx.userRepository.findById(auth.userId);
+    if (!user) {
+      throw ApiError.userNotFound();
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      age: user.age,
+      createdAt: user.createdAt.toISOString(),
+    };
   },
 });
