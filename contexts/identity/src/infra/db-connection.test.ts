@@ -1,23 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockSecrets = {
-  getJson: vi.fn(),
-};
-const mockSsm = {
-  getRequiredString: vi.fn(),
-};
+const { mockSecrets, mockSsm, mockPoolInstance, Pool, PostgresDialect, Kysely } = vi.hoisted(() => {
+  const mockSecrets = { getJson: vi.fn() };
+  const mockSsm = { getRequiredString: vi.fn() };
+  const mockPoolInstance = { end: vi.fn().mockResolvedValue(undefined) };
+  const Pool = vi.fn().mockImplementation(() => mockPoolInstance);
+  const PostgresDialect = vi.fn();
+  const Kysely = vi.fn().mockImplementation((config: { dialect: unknown }) => ({ _config: config }));
+  return { mockSecrets, mockSsm, mockPoolInstance, Pool, PostgresDialect, Kysely };
+});
 
 vi.mock('@spark-match/shared/infra', () => ({
   createSecretsReader: vi.fn().mockReturnValue(mockSecrets),
   createSsmReader: vi.fn().mockReturnValue(mockSsm),
 }));
 
-const mockPoolInstance = { end: vi.fn().mockResolvedValue(undefined) };
-const Pool = vi.fn().mockImplementation(() => mockPoolInstance);
-const PostgresDialect = vi.fn();
-const Kysely = vi.fn().mockImplementation((config: { dialect: unknown }) => ({ _config: config }));
-
 vi.mock('pg', () => ({ Pool }));
+
 vi.mock('kysely', () => ({
   Kysely,
   PostgresDialect,
