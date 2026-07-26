@@ -15,6 +15,14 @@ Parameters:
     Type: String
   NodeRuntimeLayerArn:
     Type: String
+  VpcSubnetIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: Comma-separated list of VPC subnet IDs (for VPC-attached Lambdas).
+  VpcSecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: Comma-separated list of security group IDs (for VPC-attached Lambdas).
 
 Globals:
   Function:
@@ -32,6 +40,13 @@ Globals:
         EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
         DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
         JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
+        # Node 24 no longer auto-loads Amazon CA certificates. The RDS CA
+        # bundle is shipped via the layer; point Node at it before opening
+        # any TLS connection to RDS.
+        NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
+
+Conditions:
+  HasVpcConfig: !Not [!Equals [!Join ['', !Ref VpcSubnetIds], '']]
 
 Resources:
   IdentityRegisterLogGroup:
@@ -71,6 +86,11 @@ Resources:
             EventBusName: !Sub 'spark-match-events-${Environment}'
         - SSMParameterReadPolicy:
             ParameterName: !Sub 'spark-match-${Environment}-*'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
 
   IdentityLoginFunction:
     Type: AWS::Serverless::Function
@@ -89,6 +109,11 @@ Resources:
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
 
   IdentityGetMeFunction:
     Type: AWS::Serverless::Function
@@ -108,6 +133,51 @@ Resources:
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  # ===========================================================================
+  # IdentityMigrateFunction - runs node-pg-migrate against RDS
+  # ===========================================================================
+  # NOT exposed via HTTP. Invoked directly via:
+  #   aws lambda invoke \
+  #     --function-name spark-match-identity-migrate-dev \
+  #     --payload '{"direction":"up"}' \
+  #     out.json
+  # IAM-based auth (lambda:InvokeFunction) replaces the previous token-based
+  # auth so there is no static secret to rotate and no HTTP surface to
+  # attack.
+  # ===========================================================================
+  IdentityMigrateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-migrate-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: migrate.handler
+      Description: Apply node-pg-migrate migrations against RDS (direct invoke, not HTTP)
+      Timeout: 60
+      MemorySize: 1024
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: !Sub 'identity-migrate-${Environment}'
+          ENVIRONMENT: !Ref Environment
+          # Resolved by Terraform from the same secret as the other
+          # identity Lambdas (DB_SECRET_ARN) at deploy time.
+          MIGRATE_DATABASE_URL: '{{resolve:ssm:/spark-match/db/connection-url}}'
+          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+        - SSMParameterReadPolicy:
+            ParameterName: 'spark-match-${Environment}-db-connection-url'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
 
 Outputs:
   IdentityRegisterFunctionArn:
@@ -116,3 +186,5 @@ Outputs:
     Value: !GetAtt IdentityLoginFunction.Arn
   IdentityGetMeFunctionArn:
     Value: !GetAtt IdentityGetMeFunction.Arn
+  IdentityMigrateFunctionArn:
+    Value: !GetAtt IdentityMigrateFunction.Arn

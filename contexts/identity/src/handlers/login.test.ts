@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockAuthenticate, mockBuildContext, mockSend } = vi.hoisted(() => ({
+const { mockAuthenticate, mockSignForUser, mockBuildContext } = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
+  mockSignForUser: vi.fn(),
   mockBuildContext: vi.fn(),
-  mockSend: vi.fn(),
 }));
 
 vi.mock('../composition.js', () => ({
@@ -20,11 +20,6 @@ vi.mock('@aws-lambda-powertools/tracer', () => ({
     }
     captureAsyncFunc() {}
   },
-}));
-
-vi.mock('@aws-sdk/client-secrets-manager', () => ({
-  SecretsManagerClient: vi.fn().mockImplementation(() => ({ send: mockSend })),
-  GetSecretValueCommand: vi.fn().mockImplementation((input: { SecretId: string }) => ({ input })),
 }));
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
@@ -54,17 +49,19 @@ function makeEvent(body: unknown): APIGatewayProxyEventV2 {
   } as APIGatewayProxyEventV2;
 }
 
+const FAKE_JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1LTEifQ.signature';
+
 beforeEach(() => {
   mockAuthenticate.mockReset();
+  mockSignForUser.mockReset();
   mockBuildContext.mockReset();
-  mockSend.mockReset();
-  process.env.JWT_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:123:secret:jwt';
+  mockSignForUser.mockResolvedValue(FAKE_JWT);
   mockBuildContext.mockResolvedValue({
     logger: { info: vi.fn(), error: vi.fn() },
     userService: { authenticate: mockAuthenticate },
+    defaultTokenExpiresSeconds: 86400,
+    signForUser: mockSignForUser,
   });
-  // 32-byte secret: HS256 requires at least 32 bytes
-  mockSend.mockResolvedValue({ SecretString: 'a'.repeat(32) });
 });
 
 describe('POST /login handler', () => {
@@ -73,6 +70,12 @@ describe('POST /login handler', () => {
       id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f',
       email: 'a@b.com',
       fullName: 'Ada',
+      passwordHash: 'hashed',
+      age: null,
+      role: 'admin',
+      active: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
     const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
@@ -83,13 +86,16 @@ describe('POST /login handler', () => {
     const body = JSON.parse(result.body) as {
       data: { accessToken: string; expiresIn: number; user: { id: string; email: string; fullName: string } };
     };
-    expect(body.data.accessToken).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(body.data.accessToken).toBe(FAKE_JWT);
     expect(body.data.expiresIn).toBe(86400);
     expect(body.data.user).toEqual({
       id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f',
       email: 'a@b.com',
       fullName: 'Ada',
     });
+    expect(mockSignForUser).toHaveBeenCalledWith(
+      expect.objectContaining({ id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f', email: 'a@b.com' }),
+    );
   });
 
   it('rejects invalid input with 400', async () => {
@@ -99,20 +105,6 @@ describe('POST /login handler', () => {
 
     expect(result.statusCode).toBe(400);
     expect(mockAuthenticate).not.toHaveBeenCalled();
-  });
-
-  it('returns 500 when JWT_SECRET_ARN env is not set', async () => {
-    delete process.env.JWT_SECRET_ARN;
-    mockAuthenticate.mockResolvedValue({
-      id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f',
-      email: 'a@b.com',
-      fullName: 'Ada',
-    });
-
-    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
-      makeEvent({ email: 'a@b.com', password: 'supersecret123' }),
-    )) as { statusCode: number; body: string };
-
-    expect(result.statusCode).toBe(500);
+    expect(mockSignForUser).not.toHaveBeenCalled();
   });
 });

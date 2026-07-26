@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 type Chain = {
+  withSchema: ReturnType<typeof vi.fn>;
   selectFrom: ReturnType<typeof vi.fn>;
   selectAll: ReturnType<typeof vi.fn>;
   select: ReturnType<typeof vi.fn>;
@@ -15,6 +16,7 @@ type Chain = {
 function buildDb(terminal: unknown): Chain {
   const chain: Partial<Chain> = {};
   const finish = vi.fn().mockResolvedValue(terminal);
+  chain.withSchema = vi.fn().mockReturnThis();
   chain.selectFrom = vi.fn().mockReturnThis();
   chain.insertInto = vi.fn().mockReturnThis();
   chain.selectAll = vi.fn().mockReturnThis();
@@ -35,6 +37,8 @@ const rowFixture = {
   full_name: 'Ada',
   password_hash: 'scrypt$1$2$3$hash',
   age: 36,
+  role: 'admin' as const,
+  active: true,
   created_at: new Date('2026-01-01T00:00:00.000Z'),
   updated_at: new Date('2026-01-01T00:00:00.000Z'),
 };
@@ -57,6 +61,8 @@ describe('createUserRepository', () => {
         fullName: 'Ada',
         passwordHash: 'scrypt$1$2$3$hash',
         age: 36,
+        role: 'admin',
+        active: true,
         createdAt: rowFixture.created_at,
         updatedAt: rowFixture.updated_at,
       });
@@ -133,9 +139,19 @@ describe('createUserRepository', () => {
       chain.executeTakeFirstOrThrow = vi.fn().mockRejectedValue(new Error('insert failed'));
       const repo = createUserRepository(chain as never);
 
+      // withDbErrorMapping wraps any thrown error as ApiError.dbUnavailable
+      // (code: db.unavailable, meta.operation: users.create). The original
+      // 'insert failed' message is preserved on `cause`.
       await expect(
         repo.create({ email: 'a@b.com', passwordHash: 'h', fullName: 'Ada' }),
-      ).rejects.toThrow('insert failed');
+      ).rejects.toMatchObject({
+        statusCode: 503,
+        code: 'service_unavailable',
+        details: expect.arrayContaining([
+          expect.objectContaining({ code: 'db.unavailable' }),
+        ]),
+        cause: expect.objectContaining({ message: 'insert failed' }),
+      });
     });
   });
 
