@@ -73,3 +73,8 @@ env/
 *.tfstate.*
 *.tfstate.backup
 .terraform.lock.hcl
+
+# Husky (auto-generated state dir)
+/.husky/_/
+!/.husky/pre-commit
+!/.husky/pre-push
