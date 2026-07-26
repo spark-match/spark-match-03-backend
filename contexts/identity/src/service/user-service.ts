@@ -1,9 +1,41 @@
 import { ApiError } from '@spark-match/shared/http';
 import { makeDomainEvent, type EventPublisher } from '@spark-match/shared/events';
 import { hashPassword, verifyPassword } from '@spark-match/shared/auth';
-import type { UserRepository } from '../infra/user-repository.js';
-import type { User } from '../domain/user.js';
-import type { UserRegisteredEvent } from '../domain/events.js';
+import type { UserRepository, ListUsersFilters, ListUsersResult } from '../infra/user-repository.js';
+import type {
+  User,
+  UpdateUserInput,
+  CreateUserInput,
+} from '../domain/user.js';
+import type {
+  UserRegisteredEvent,
+  UserLoggedInEvent,
+  UserPasswordChangedEvent,
+  UserUpdatedEvent,
+  UserDeactivatedEvent,
+  UserActivatedEvent,
+  UserRoleChangedEvent,
+} from '../domain/events.js';
+
+const SOURCE = 'spark-match.identity';
+const nowIso = (): string => new Date().toISOString();
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  fullName: string;
+  age?: number;
+}
+
+export interface ActorTarget {
+  actorUserId: string;
+  targetUserId: string;
+}
+
+export interface ListUsersInput {
+  actorUserId: string;
+  filters: ListUsersFilters;
+}
 
 export interface UserService {
   register(input: {
@@ -183,3 +215,5 @@ export function createUserService(deps: {
     },
   };
 }
+
+export type { UserRole } from '../domain/user.js';
