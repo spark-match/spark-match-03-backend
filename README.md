@@ -4,6 +4,7 @@
 > Hybrid architecture: Lambda for CRUD/EDA, dedicated Python server for the AI Advisor (in [`08-deep-agent`](../08-deep-agent/)).
 >
 > _Last verified against `spark-match-01-devops@main` (PR #117, 26 Jul 2026): SonarCloud CI improvements active — fail-loud on QG timeout, cached `~/.sonar`, architecture sensor skipped._
+> _Second CI run queued to verify cache hit (`sonar-tools-v8.2.1-Linux`)._
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
 [![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
