@@ -13,7 +13,8 @@
     "build:shared": "npm run build --workspace=@spark-match/shared",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.statements=80 --coverage.thresholds.branches=75",
+    "test:coverage:sonar": "vitest run --coverage --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 --coverage.reporter=lcov",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write \"**/*.{ts,json,md,yaml,yml}\"",
@@ -30,7 +31,8 @@
     "migrate:up": "node-pg-migrate up --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
     "migrate:down": "node-pg-migrate down --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
     "migrate:redo": "node-pg-migrate redo --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
-    "migrate:status": "node-pg-migrate status --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public"
+    "migrate:status": "node-pg-migrate status --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@aws-sdk/client-ssm": "^3.1095.0",
@@ -43,6 +45,7 @@
     "esbuild": "^0.23.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.0.0",
     "node-pg-migrate": "^9.0.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0",
