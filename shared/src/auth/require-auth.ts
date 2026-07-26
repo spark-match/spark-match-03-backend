@@ -15,10 +15,10 @@
 import type { Logger } from '@aws-lambda-powertools/logger';
 import { ApiError } from '../http/api-error.js';
 import { type AuthContext, type LambdaAuthorizerContext } from './auth-context.js';
-import { loadJwtSecret, _resetJwtSecretCache } from './jwt-secret-loader.js';
+import { loadJwtSecret } from './jwt-secret-loader.js';
 import { verifyJwt } from './jwt-helpers.js';
 
-export { _resetJwtSecretCache };
+export { _resetJwtSecretCache } from './jwt-secret-loader.js';
 
 export async function requireAuth(event: unknown, logger: Logger): Promise<AuthContext> {
   const ctx = (
