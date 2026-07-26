@@ -1,37 +1,34 @@
 # CODEOWNERS - Spark Match Backend (03)
 #
-# Politica de aprobacion (configurada via ruleset):
+# Politica de aprobacion (configurada en branch protection):
 #   - dev:  required_approving_review_count: 1
-#            require_code_owner_review: true
+#            require_code_owner_reviews: true
 #   - main: required_approving_review_count: 1
-#            require_code_owner_review: true
+#            require_code_owner_reviews: true
+#            require_last_push_approval: true
 #
-# CODE OWNER del repo: @spark-match/backend-devs
+# CODE OWNER del repo (catch-all): @spark-match/backend-devs
 #   Miembros: ahincho, BriyitHT
 #
 # Paths criticos (governance): @spark-match/product-owners
+#   - Decisiones arquitectonicas, onboarding, postmortems, docs raiz.
+#   - Miembros: dbarretol, FabiTaparaQuispe, ahincho
 #
-# Convencion: explicit paths, no catch-all.
+# Nota: el autor del PR no puede aprobar su propio PR, ni siquiera siendo
+# CODE OWNER (regla de GitHub). Por ejemplo, un PR abierto por ahincho
+# necesita la aprobacion de cualquier otro miembro del team.
 
+# =============================================================================
+# Catch-all: el equipo tecnico del repo es CODE OWNER del codigo
+# =============================================================================
+*                                          @spark-match/backend-devs
+
+# =============================================================================
+# Paths criticos: product-owners revisa governance y docs raiz
+# =============================================================================
 /decisions/                                @spark-match/product-owners
 /onboarding/                               @spark-match/product-owners
 /postmortems/                              @spark-match/product-owners
-/README.md                                 @spark-match/backend-devs @spark-match/product-owners
-/CONTRIBUTING.md                           @spark-match/backend-devs @spark-match/product-owners
-/LICENSE                                   @spark-match/backend-devs @spark-match/product-owners
-
-/.github/                                  @spark-match/backend-devs
-/scripts/                                  @spark-match/backend-devs
-/contexts/                                 @spark-match/backend-devs
-/docs/                                     @spark-match/backend-devs
-/layers/                                   @spark-match/backend-devs
-/migrations/                               @spark-match/backend-devs
-/shared/                                   @spark-match/backend-devs
-/tests/                                    @spark-match/backend-devs
-
-/.eslintrc.cjs                             @spark-match/backend-devs
-/.prettierrc                               @spark-match/backend-devs
-/pyproject.toml                            @spark-match/backend-devs
-/ruff.toml                                 @spark-match/backend-devs
-/samconfig.toml                            @spark-match/backend-devs
-/template.yaml                             @spark-match/backend-devs
+/README.md                                 @spark-match/product-owners
+/CONTRIBUTING.md                           @spark-match/product-owners
+/LICENSE                                   @spark-match/product-owners

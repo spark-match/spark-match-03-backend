@@ -23,7 +23,7 @@ export interface SsmReader {
 export function createSsmReader(defaultMaxAge = DEFAULT_MAX_AGE_SECONDS): SsmReader {
   return {
     async getString(name: string, maxAge = defaultMaxAge): Promise<string | undefined> {
-      let value: string | { Value: string } | undefined;
+      let value: string | unknown;
       try {
         value = await getParameter(name, {
           maxAge,
@@ -35,7 +35,8 @@ export function createSsmReader(defaultMaxAge = DEFAULT_MAX_AGE_SECONDS): SsmRea
       }
       if (typeof value === 'string') return value;
       if (typeof value === 'object' && value !== null && 'Value' in value) {
-        return value.Value;
+        const v = (value as { Value: string }).Value;
+        return v;
       }
       return undefined;
     },
@@ -53,11 +54,11 @@ export function createSsmReader(defaultMaxAge = DEFAULT_MAX_AGE_SECONDS): SsmRea
         getParameter(name, { forceFetch: true }).catch(() => {
           // Best-effort; ignore errors here.
         });
-      } else {
-        // No name provided: nothing to invalidate locally. The cache is
-        // owned by Powertools; this hook is a placeholder for symmetry
-        // with the previous interface and a future bulk flush.
+        return;
       }
+      // No name provided: nothing to invalidate locally. The cache is
+      // owned by Powertools; this hook is a placeholder for symmetry
+      // with the previous interface and a future bulk flush.
     },
   };
 }

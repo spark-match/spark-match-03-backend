@@ -15,14 +15,6 @@ Parameters:
     Type: String
   NodeRuntimeLayerArn:
     Type: String
-  VpcSubnetIds:
-    Type: CommaDelimitedList
-    Default: ''
-    Description: Comma-separated list of VPC subnet IDs (for VPC-attached Lambdas).
-  VpcSecurityGroupIds:
-    Type: CommaDelimitedList
-    Default: ''
-    Description: Comma-separated list of security group IDs (for VPC-attached Lambdas).
 
 Globals:
   Function:
@@ -40,13 +32,6 @@ Globals:
         EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
         DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
         JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
-        # Node 24 no longer auto-loads Amazon CA certificates. The RDS CA
-        # bundle is shipped via the layer; point Node at it before opening
-        # any TLS connection to RDS.
-        NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-
-Conditions:
-  HasVpcConfig: !Not [!Equals [!Join ['', !Ref VpcSubnetIds], '']]
 
 Resources:
   IdentityRegisterLogGroup:
@@ -89,6 +74,16 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-deactivate-user-${Environment}'
       RetentionInDays: 14
+  IdentityUpdateUserLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-update-user-${Environment}'
+      RetentionInDays: 14
+  IdentityAuthorizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-authorizer-${Environment}'
+      RetentionInDays: 14
 
   IdentityRegisterFunction:
     Type: AWS::Serverless::Function
@@ -111,11 +106,6 @@ Resources:
             EventBusName: !Sub 'spark-match-events-${Environment}'
         - SSMParameterReadPolicy:
             ParameterName: !Sub 'spark-match-${Environment}-*'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
 
   IdentityLoginFunction:
     Type: AWS::Serverless::Function
@@ -134,11 +124,6 @@ Resources:
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-      VpcConfig: !If
-        - HasVpcConfig
-        - SubnetIds: !Ref VpcSubnetIds
-          SecurityGroupIds: !Ref VpcSecurityGroupIds
-        - !Ref AWS::NoValue
 
   IdentityGetMeFunction:
     Type: AWS::Serverless::Function
@@ -178,7 +163,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/me
             Method: PATCH
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -288,6 +274,77 @@ Resources:
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
+  IdentityUpdateUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-update-user-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: update-user.handler
+      Description: Update user (PATCH /v1/users/{userId}) - admin only
+      Events:
+        UpdateUserApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiId
+            Path: /v1/users/{userId}
+            Method: PATCH
+            Authorizer: NONE
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Sub 'spark-match-events-${Environment}'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  # ===========================================================================
+  # IdentityAuthorizerFunction - HttpApi v2 Lambda Authorizer (REQUEST).
+  # ===========================================================================
+  # Invoked by API Gateway BEFORE the protected handler. Uses the Simple
+  # Response format (no IAM permissions to invoke downstream Lambdas are
+  # required). On success, the returned context (userId/email/role) is
+  # attached to event.requestContext.authorizer.lambda and picked up by
+  # the handler's requireAuth middleware.
+  # ===========================================================================
+  IdentityAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-authorizer-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: authorizer.handler
+      Description: HttpApi Lambda Authorizer - verifies JWT and attaches userId/email/role to the request context
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: !Sub 'identity-authorizer-${Environment}'
+          ENVIRONMENT: !Ref Environment
+          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
+        - SSMParameterReadPolicy:
+            ParameterName: 'spark-match-secret-jwt-arn'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  # HttpApi::Auth resource - reusable Authorizer reference. Routes opt in
+  # with `Auth: { Authorizer: !Ref IdentityAuthorizer }`.
+  IdentityAuthorizer:
+    Type: HttpApi::Auth
+    Properties:
+      ApiId: !Ref HttpApiId
+      AuthorizerType: REQUEST
+      AuthorizerResultTtlInSeconds: 0
+      Identity:
+        Fn::GetAtt: [IdentityAuthorizerFunction, Arn]
+
   # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
   # ===========================================================================
@@ -345,5 +402,9 @@ Outputs:
     Value: !GetAtt IdentityActivateUserFunction.Arn
   IdentityDeactivateUserFunctionArn:
     Value: !GetAtt IdentityDeactivateUserFunction.Arn
+  IdentityUpdateUserFunctionArn:
+    Value: !GetAtt IdentityUpdateUserFunction.Arn
+  IdentityAuthorizerFunctionArn:
+    Value: !GetAtt IdentityAuthorizerFunction.Arn
   IdentityMigrateFunctionArn:
     Value: !GetAtt IdentityMigrateFunction.Arn
