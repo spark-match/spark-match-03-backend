@@ -45,10 +45,16 @@ import { buildContext } from './composition.js';
 import { createLogger } from '@aws-lambda-powertools/logger';
 import { createSsmReader } from '@spark-match/shared/infra';
 import { createEventBridgeClient } from '@spark-match/shared/events';
+import { getDbConnection } from './infra/db-connection.js';
+import { createUserRepository } from './infra/user-repository.js';
+import { createUserService } from './service/user-service.js';
 
 const mockedCreateLogger = vi.mocked(createLogger);
 const mockedCreateSsmReader = vi.mocked(createSsmReader);
 const mockedCreateEventBridgeClient = vi.mocked(createEventBridgeClient);
+const mockedGetDbConnection = vi.mocked(getDbConnection);
+const mockedCreateUserRepository = vi.mocked(createUserRepository);
+const mockedCreateUserService = vi.mocked(createUserService);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -57,9 +63,9 @@ beforeEach(() => {
   } as never);
   mockedCreateEventBridgeClient.mockReturnValue({ name: 'mock-publisher' } as never);
   mockedCreateLogger.mockReturnValue({ name: 'mock-logger' } as never);
-  vi.mocked((await import('./infra/db-connection.js')).getDbConnection).mockResolvedValue(mockDb as never);
-  vi.mocked((await import('./infra/user-repository.js')).createUserRepository).mockReturnValue(mockUserRepository as never);
-  vi.mocked((await import('./service/user-service.js')).createUserService).mockReturnValue(mockUserService as never);
+  mockedGetDbConnection.mockResolvedValue(mockDb as never);
+  mockedCreateUserRepository.mockReturnValue(mockUserRepository as never);
+  mockedCreateUserService.mockReturnValue(mockUserService as never);
 });
 
 describe('buildContext', () => {
@@ -87,7 +93,7 @@ describe('buildContext', () => {
   it('wires userService from the userRepository and eventPublisher', async () => {
     await buildContext();
 
-    expect(vi.mocked((await import('./service/user-service.js')).createUserService)).toHaveBeenCalledWith({
+    expect(mockedCreateUserService).toHaveBeenCalledWith({
       userRepository: mockUserRepository,
       eventPublisher: { name: 'mock-publisher' },
     });
