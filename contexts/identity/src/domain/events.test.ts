@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   UserRegisteredEventSchema,
   UserLoggedInEventSchema,
-  ProfileUpdatedEventSchema,
+  UserUpdatedEventSchema,
 } from './events.js';
 
 const validUuid = '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f';
@@ -97,9 +97,9 @@ describe('UserLoggedInEventSchema', () => {
   });
 });
 
-describe('ProfileUpdatedEventSchema', () => {
+describe('UserUpdatedEventSchema', () => {
   it('accepts a valid payload with empty changes', () => {
-    const result = ProfileUpdatedEventSchema.safeParse({
+    const result = UserUpdatedEventSchema.safeParse({
       schemaVersion: '1.0',
       userId: validUuid,
       changes: {},
@@ -109,7 +109,7 @@ describe('ProfileUpdatedEventSchema', () => {
   });
 
   it('accepts a valid payload with arbitrary change values', () => {
-    const result = ProfileUpdatedEventSchema.safeParse({
+    const result = UserUpdatedEventSchema.safeParse({
       schemaVersion: '1.0',
       userId: validUuid,
       changes: { fullName: { from: 'Ada', to: 'Augusta' } },
@@ -119,7 +119,7 @@ describe('ProfileUpdatedEventSchema', () => {
   });
 
   it('rejects an unknown schemaVersion', () => {
-    const result = ProfileUpdatedEventSchema.safeParse({
+    const result = UserUpdatedEventSchema.safeParse({
       schemaVersion: '2.5',
       userId: validUuid,
       changes: {},
@@ -129,7 +129,7 @@ describe('ProfileUpdatedEventSchema', () => {
   });
 
   it('rejects a non-uuid userId', () => {
-    const result = ProfileUpdatedEventSchema.safeParse({
+    const result = UserUpdatedEventSchema.safeParse({
       schemaVersion: '1.0',
       userId: 'not-a-uuid',
       changes: {},

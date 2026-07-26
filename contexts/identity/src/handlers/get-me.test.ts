@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockFindById, mockBuildContext } = vi.hoisted(() => ({
-  mockFindById: vi.fn(),
+const { mockGetUser, mockBuildContext } = vi.hoisted(() => ({
+  mockGetUser: vi.fn(),
   mockBuildContext: vi.fn(),
 }));
 
@@ -54,55 +54,76 @@ function makeAuthEvent(userId = 'u-1'): APIGatewayProxyEventV2 {
     requestContext: {
       ...makeEvent().requestContext,
       authorizer: {
-        lambda: { userId, email: 'a@b.com', role: 'user' },
+        lambda: { userId, email: 'a@b.com', role: 'admin' },
       },
     } as APIGatewayProxyEventV2['requestContext'],
   });
 }
 
+const SELF_ID = 'u-1';
+
 beforeEach(() => {
-  mockFindById.mockReset();
+  mockGetUser.mockReset();
   mockBuildContext.mockReset();
   mockBuildContext.mockResolvedValue({
-    userRepository: { findById: mockFindById },
+    userService: { getUser: mockGetUser },
   });
 });
 
-describe('GET /me handler', () => {
+describe('GET /me handler - happy path', () => {
   it('returns the user profile when found', async () => {
     const createdAt = new Date('2026-01-01T00:00:00.000Z');
-    mockFindById.mockResolvedValue({
-      id: 'u-1',
+    const updatedAt = new Date('2026-01-02T00:00:00.000Z');
+    mockGetUser.mockResolvedValue({
+      id: SELF_ID,
       email: 'a@b.com',
       fullName: 'Ada',
+      passwordHash: 'hashed',
       age: 36,
+      role: 'admin',
+      active: true,
       createdAt,
+      updatedAt,
     });
 
     const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
-      makeAuthEvent('u-1'),
+      makeAuthEvent(SELF_ID),
     )) as { statusCode: number; body: string };
 
     expect(result.statusCode).toBe(200);
-    const body = JSON.parse(result.body) as { data: { id: string; email: string; createdAt: string } };
+    const body = JSON.parse(result.body) as {
+      data: { id: string; email: string; fullName: string; age: number; role: string; active: boolean; createdAt: string; updatedAt: string };
+    };
     expect(body.data).toEqual({
-      id: 'u-1',
+      id: SELF_ID,
       email: 'a@b.com',
       fullName: 'Ada',
       age: 36,
+      role: 'admin',
+      active: true,
       createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
     });
+    expect((body.data as unknown as { passwordHash?: string }).passwordHash).toBeUndefined();
   });
 
-  it('returns 404 when the user is not found', async () => {
-    mockFindById.mockResolvedValue(null);
+  it('passes the auth userId as both actor and target (self-as-target)', async () => {
+    mockGetUser.mockResolvedValue({
+      id: SELF_ID,
+      email: 'a@b.com',
+      fullName: 'Ada',
+      passwordHash: 'hashed',
+      age: null,
+      role: 'admin',
+      active: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
 
-    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
-      makeAuthEvent('u-missing'),
-    )) as { statusCode: number; body: string };
+    await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
+      makeAuthEvent(SELF_ID),
+    );
 
-    expect(result.statusCode).toBe(404);
-    const body = JSON.parse(result.body) as { error: { code: string } };
-    expect(body.error.code).toBe('not_found');
+    expect(mockGetUser).toHaveBeenCalledWith({ actorUserId: SELF_ID, targetUserId: SELF_ID });
   });
 });
