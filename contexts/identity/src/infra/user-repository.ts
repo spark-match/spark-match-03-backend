@@ -192,7 +192,7 @@ export function createUserRepository(db: Kysely<Database>): UserRepository {
         const rows = await query.execute();
         const hasMore = rows.length > filters.limit;
         const trimmed = hasMore ? rows.slice(0, filters.limit) : rows;
-        const lastId = trimmed[trimmed.length - 1]?.id ?? null;
+        const lastId = trimmed.at(-1)?.id ?? null;
         return {
           users: trimmed.map(mapRowToUser),
           nextCursor: hasMore && lastId ? lastId : null,
@@ -208,7 +208,7 @@ export function createUserRepository(db: Kysely<Database>): UserRepository {
           .select((eb) => eb.fn.count<number>('id').as('total'))
           .executeTakeFirstOrThrow();
         const total = (row as unknown as { total: string | number }).total;
-        return typeof total === 'string' ? parseInt(total, 10) : total;
+        return typeof total === 'string' ? Number.parseInt(total, 10) : total;
       });
     },
   };

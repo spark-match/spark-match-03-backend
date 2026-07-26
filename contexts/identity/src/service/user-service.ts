@@ -24,7 +24,6 @@ import { hashPassword, verifyPassword } from '@spark-match/shared/auth';
 import type { UserRepository, ListUsersFilters, ListUsersResult } from '../infra/user-repository.js';
 import type {
   User,
-  UserRole,
   UpdateUserInput,
   CreateUserInput,
 } from '../domain/user.js';
@@ -290,5 +289,4 @@ export function createUserService(deps: {
   };
 }
 
-// Suppress unused-type warning (UserRole is re-exported via domain/user).
-export type { UserRole };
+export type { UserRole } from '../domain/user.js';
