@@ -15,35 +15,10 @@
 import type { Logger } from '@aws-lambda-powertools/logger';
 import { ApiError } from '../http/api-error.js';
 import { type AuthContext, type LambdaAuthorizerContext } from './auth-context.js';
+import { loadJwtSecret } from './jwt-secret-loader.js';
 import { verifyJwt } from './jwt-helpers.js';
 
-let cachedSecret: Uint8Array | null = null;
-let pendingSecret: Promise<Uint8Array> | null = null;
-
-async function loadJwtSecret(): Promise<Uint8Array> {
-  if (cachedSecret) return cachedSecret;
-  if (pendingSecret) return pendingSecret;
-
-  pendingSecret = (async () => {
-    const { createSsmReader } = await import('../infra/ssm-reader.js');
-    const { createSecretsReader } = await import('../infra/secrets-reader.js');
-    const ssm = createSsmReader();
-    const secrets = createSecretsReader();
-    const secretArn = await ssm.getRequiredString('/spark-match/secret/jwt-arn');
-    const secretValue = await secrets.getRequiredString(secretArn);
-    const bytes = new TextEncoder().encode(secretValue);
-    cachedSecret = bytes;
-    pendingSecret = null;
-    return bytes;
-  })();
-  return pendingSecret;
-}
-
-/** Reset the cached JWT secret. Intended for tests only. */
-export function _resetJwtSecretCache(): void {
-  cachedSecret = null;
-  pendingSecret = null;
-}
+export { _resetJwtSecretCache } from './jwt-secret-loader.js';
 
 export async function requireAuth(event: unknown, logger: Logger): Promise<AuthContext> {
   const ctx = (

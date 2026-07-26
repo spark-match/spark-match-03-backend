@@ -79,6 +79,11 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-update-user-${Environment}'
       RetentionInDays: 14
+  IdentityAuthorizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-authorizer-${Environment}'
+      RetentionInDays: 14
 
   IdentityRegisterFunction:
     Type: AWS::Serverless::Function
@@ -158,7 +163,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/me
             Method: PATCH
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -295,6 +301,51 @@ Resources:
         - !Ref AWS::NoValue
 
   # ===========================================================================
+  # IdentityAuthorizerFunction - HttpApi v2 Lambda Authorizer (REQUEST).
+  # ===========================================================================
+  # Invoked by API Gateway BEFORE the protected handler. Uses the Simple
+  # Response format (no IAM permissions to invoke downstream Lambdas are
+  # required). On success, the returned context (userId/email/role) is
+  # attached to event.requestContext.authorizer.lambda and picked up by
+  # the handler's requireAuth middleware.
+  # ===========================================================================
+  IdentityAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-authorizer-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: authorizer.handler
+      Description: HttpApi Lambda Authorizer - verifies JWT and attaches userId/email/role to the request context
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: !Sub 'identity-authorizer-${Environment}'
+          ENVIRONMENT: !Ref Environment
+          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
+        - SSMParameterReadPolicy:
+            ParameterName: 'spark-match-secret-jwt-arn'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  # HttpApi::Auth resource - reusable Authorizer reference. Routes opt in
+  # with `Auth: { Authorizer: !Ref IdentityAuthorizer }`.
+  IdentityAuthorizer:
+    Type: HttpApi::Auth
+    Properties:
+      ApiId: !Ref HttpApiId
+      AuthorizerType: REQUEST
+      AuthorizerResultTtlInSeconds: 0
+      Identity:
+        Fn::GetAtt: [IdentityAuthorizerFunction, Arn]
+
+  # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
   # ===========================================================================
   # NOT exposed via HTTP. Invoked directly via:
@@ -353,5 +404,7 @@ Outputs:
     Value: !GetAtt IdentityDeactivateUserFunction.Arn
   IdentityUpdateUserFunctionArn:
     Value: !GetAtt IdentityUpdateUserFunction.Arn
+  IdentityAuthorizerFunctionArn:
+    Value: !GetAtt IdentityAuthorizerFunction.Arn
   IdentityMigrateFunctionArn:
     Value: !GetAtt IdentityMigrateFunction.Arn
