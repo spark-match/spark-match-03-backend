@@ -57,6 +57,9 @@ beforeEach(() => {
   } as never);
   mockedCreateEventBridgeClient.mockReturnValue({ name: 'mock-publisher' } as never);
   mockedCreateLogger.mockReturnValue({ name: 'mock-logger' } as never);
+  vi.mocked((await import('./infra/db-connection.js')).getDbConnection).mockResolvedValue(mockDb as never);
+  vi.mocked((await import('./infra/user-repository.js')).createUserRepository).mockReturnValue(mockUserRepository as never);
+  vi.mocked((await import('./service/user-service.js')).createUserService).mockReturnValue(mockUserService as never);
 });
 
 describe('buildContext', () => {

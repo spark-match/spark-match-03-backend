@@ -38,6 +38,14 @@ beforeEach(() => {
   PostgresDialect.mockClear();
   Kysely.mockClear();
   mockPoolInstance.end.mockClear();
+  mockSsm.getRequiredString.mockResolvedValue('arn:aws:secretsmanager:us-east-1:123:secret:db');
+  mockSecrets.getJson.mockResolvedValue({
+    host: 'localhost',
+    port: 5432,
+    database: 'spark',
+    username: 'admin',
+    password: 'shh',
+  });
 });
 
 describe('getDbConnection', () => {
