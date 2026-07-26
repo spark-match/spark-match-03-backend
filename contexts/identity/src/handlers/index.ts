@@ -7,3 +7,4 @@ export { handler as changePassword } from './change-password.js';
 export { handler as listUsers } from './list-users.js';
 export { handler as activateUser } from './activate-user.js';
 export { handler as deactivateUser } from './deactivate-user.js';
+export { handler as authorizer } from './authorizer.js';
