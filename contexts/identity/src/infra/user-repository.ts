@@ -1,5 +1,19 @@
+// =============================================================================
+// User repository - kysely queries against identity.users
+// =============================================================================
+// All DB calls are wrapped with withDbErrorMapping so any thrown error is
+// surfaced as ApiError.dbUnavailable (code: db.unavailable, meta.operation).
+// Already-typed ApiErrors from the service layer propagate unchanged.
+//
+// Kysely does NOT allow schema-qualified table names in `selectFrom()` to
+// match the `Database` interface (it would type as `never`). We use the
+// `withSchema()` modifier on the query builder instead, which keeps the
+// type-level link to the `Database['users']` row type.
+// =============================================================================
+
 import type { Kysely } from 'kysely';
-import type { User, CreateUserInput } from '../domain/user.js';
+import { withDbErrorMapping } from '@spark-match/shared/infra';
+import type { User, CreateUserInput, UserRole, UpdateUserInput } from '../domain/user.js';
 
 export interface Database {
   users: {
@@ -8,9 +22,25 @@ export interface Database {
     full_name: string;
     password_hash: string;
     age: number | null;
+    role: UserRole;
+    active: boolean;
     created_at: Date;
     updated_at: Date;
   };
+}
+
+const IDENTITY = 'identity';
+const DEFAULT_ROLE: UserRole = 'admin';
+
+export interface ListUsersFilters {
+  limit: number;
+  cursor?: string;
+  emailContains?: string;
+}
+
+export interface ListUsersResult {
+  users: User[];
+  nextCursor: string | null;
 }
 
 export interface UserRepository {
@@ -18,45 +48,62 @@ export interface UserRepository {
   findById(id: string): Promise<User | null>;
   create(input: CreateUserInput): Promise<User>;
   existsByEmail(email: string): Promise<boolean>;
+  updatePassword(id: string, passwordHash: string): Promise<User>;
+  update(id: string, changes: UpdateUserInput): Promise<User>;
+  setActive(id: string, active: boolean): Promise<User>;
+  setRole(id: string, role: UserRole): Promise<User>;
+  list(filters: ListUsersFilters): Promise<ListUsersResult>;
+  count(): Promise<number>;
 }
 
 export function createUserRepository(db: Kysely<Database>): UserRepository {
   return {
     async findByEmail(email: string): Promise<User | null> {
-      const row = await db
-        .selectFrom('users')
-        .selectAll()
-        .where('email', '=', email)
-        .executeTakeFirst();
-      return row ? mapRowToUser(row) : null;
+      return withDbErrorMapping('users.findByEmail', async () => {
+        const row = await db
+          .withSchema(IDENTITY)
+          .selectFrom('users')
+          .selectAll()
+          .where('email', '=', email)
+          .executeTakeFirst();
+        return row ? mapRowToUser(row) : null;
+      });
     },
 
     async findById(id: string): Promise<User | null> {
-      const row = await db
-        .selectFrom('users')
-        .selectAll()
-        .where('id', '=', id)
-        .executeTakeFirst();
-      return row ? mapRowToUser(row) : null;
+      return withDbErrorMapping('users.findById', async () => {
+        const row = await db
+          .withSchema(IDENTITY)
+          .selectFrom('users')
+          .selectAll()
+          .where('id', '=', id)
+          .executeTakeFirst();
+        return row ? mapRowToUser(row) : null;
+      });
     },
 
     async create(input: CreateUserInput): Promise<User> {
-      const id = crypto.randomUUID();
-      const now = new Date();
-      const row = await db
-        .insertInto('users')
-        .values({
-          id,
-          email: input.email,
-          full_name: input.fullName,
-          password_hash: input.passwordHash,
-          age: input.age ?? null,
-          created_at: now,
-          updated_at: now,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow();
-      return mapRowToUser(row);
+      return withDbErrorMapping('users.create', async () => {
+        const id = crypto.randomUUID();
+        const now = new Date();
+        const row = await db
+          .withSchema(IDENTITY)
+          .insertInto('users')
+          .values({
+            id,
+            email: input.email,
+            full_name: input.fullName,
+            password_hash: input.passwordHash,
+            age: input.age ?? null,
+            role: DEFAULT_ROLE,
+            active: true,
+            created_at: now,
+            updated_at: now,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        return mapRowToUser(row);
+      });
     },
 
     async existsByEmail(email: string): Promise<boolean> {
@@ -174,6 +221,8 @@ function mapRowToUser(row: Database['users']): User {
     fullName: row.full_name,
     passwordHash: row.password_hash,
     age: row.age,
+    role: row.role,
+    active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
