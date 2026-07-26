@@ -24,6 +24,10 @@ const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 100;
 const AWS_BATCH_LIMIT = 10;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export interface EventBridgeConfig {
   busArn: string;
   region?: string;
@@ -45,10 +49,6 @@ export function createEventBridgeClient(config: EventBridgeConfig): EventPublish
       DetailType: event.detailType,
       Detail: JSON.stringify(event.detail),
     };
-  }
-
-  async function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async function sendWithRetry(entries: PutEventsRequestEntry[]): Promise<void> {
