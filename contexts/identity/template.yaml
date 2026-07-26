@@ -34,6 +34,22 @@ Globals:
         JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
 
 Resources:
+  IdentityRegisterLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-register-${Environment}'
+      RetentionInDays: 14
+  IdentityLoginLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-login-${Environment}'
+      RetentionInDays: 14
+  IdentityGetMeLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-get-me-${Environment}'
+      RetentionInDays: 14
+
   IdentityRegisterFunction:
     Type: AWS::Serverless::Function
     Properties:

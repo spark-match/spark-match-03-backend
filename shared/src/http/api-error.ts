@@ -25,9 +25,9 @@ export type ApiErrorCode =
   | 'service_unavailable';
 
 export interface ApiErrorOptions {
-  code?: ApiErrorCode | undefined;
+  code?: ApiErrorCode;
   /** Single detail or array. Always normalized to non-empty array internally. */
-  details?: ErrorDetail | ErrorDetail[] | undefined;
+  details?: ErrorDetail | ErrorDetail[];
   cause?: unknown;
 }
 

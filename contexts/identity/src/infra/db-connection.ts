@@ -1,7 +1,6 @@
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
-import { createSecretsReader, type SecretsReader } from '@spark-match/shared/infra';
-import { createSsmReader, type SsmReader } from '@spark-match/shared/infra';
+import { createSecretsReader, createSsmReader, type SecretsReader, type SsmReader } from '@spark-match/shared/infra';
 import type { Database } from '../infra/user-repository.js';
 
 interface DbCredentials {

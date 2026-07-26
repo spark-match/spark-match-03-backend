@@ -1,8 +1,6 @@
 import { Logger } from '@aws-lambda-powertools/logger';
 
-export type ServiceName = string;
-
-export function createLogger(serviceName: ServiceName): Logger {
+export function createLogger(serviceName: string): Logger {
   return new Logger({
     serviceName,
     logLevel: (process.env.LOG_LEVEL as 'DEBUG' | 'INFO' | 'WARN' | 'ERROR') || 'INFO',
