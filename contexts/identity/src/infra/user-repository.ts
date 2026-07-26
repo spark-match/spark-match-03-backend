@@ -13,7 +13,7 @@
 
 import type { Kysely } from 'kysely';
 import { withDbErrorMapping } from '@spark-match/shared/infra';
-import type { User, CreateUserInput, UserRole } from '../domain/user.js';
+import type { User, CreateUserInput, UserRole, UpdateUserInput } from '../domain/user.js';
 
 export interface Database {
   users: {
@@ -32,11 +32,28 @@ export interface Database {
 const IDENTITY = 'identity';
 const DEFAULT_ROLE: UserRole = 'admin';
 
+export interface ListUsersFilters {
+  limit: number;
+  cursor?: string;
+  emailContains?: string;
+}
+
+export interface ListUsersResult {
+  users: User[];
+  nextCursor: string | null;
+}
+
 export interface UserRepository {
   findByEmail(email: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
   create(input: CreateUserInput): Promise<User>;
   existsByEmail(email: string): Promise<boolean>;
+  updatePassword(id: string, passwordHash: string): Promise<User>;
+  update(id: string, changes: UpdateUserInput): Promise<User>;
+  setActive(id: string, active: boolean): Promise<User>;
+  setRole(id: string, role: UserRole): Promise<User>;
+  list(filters: ListUsersFilters): Promise<ListUsersResult>;
+  count(): Promise<number>;
 }
 
 export function createUserRepository(db: Kysely<Database>): UserRepository {
@@ -98,6 +115,100 @@ export function createUserRepository(db: Kysely<Database>): UserRepository {
           .where('email', '=', email)
           .executeTakeFirst();
         return row !== undefined;
+      });
+    },
+
+    async updatePassword(id: string, passwordHash: string): Promise<User> {
+      return withDbErrorMapping('users.updatePassword', async () => {
+        const row = await db
+          .withSchema(IDENTITY)
+          .updateTable('users')
+          .set({ password_hash: passwordHash, updated_at: new Date() })
+          .where('id', '=', id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        return mapRowToUser(row);
+      });
+    },
+
+    async update(id: string, changes: UpdateUserInput): Promise<User> {
+      return withDbErrorMapping('users.update', async () => {
+        const patch: Partial<Database['users']> = { updated_at: new Date() };
+        if (changes.fullName !== undefined) patch.full_name = changes.fullName;
+        if (changes.age !== undefined) patch.age = changes.age;
+        const row = await db
+          .withSchema(IDENTITY)
+          .updateTable('users')
+          .set(patch)
+          .where('id', '=', id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        return mapRowToUser(row);
+      });
+    },
+
+    async setActive(id: string, active: boolean): Promise<User> {
+      return withDbErrorMapping('users.setActive', async () => {
+        const row = await db
+          .withSchema(IDENTITY)
+          .updateTable('users')
+          .set({ active, updated_at: new Date() })
+          .where('id', '=', id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        return mapRowToUser(row);
+      });
+    },
+
+    async setRole(id: string, role: UserRole): Promise<User> {
+      return withDbErrorMapping('users.setRole', async () => {
+        const row = await db
+          .withSchema(IDENTITY)
+          .updateTable('users')
+          .set({ role, updated_at: new Date() })
+          .where('id', '=', id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        return mapRowToUser(row);
+      });
+    },
+
+    async list(filters: ListUsersFilters): Promise<ListUsersResult> {
+      return withDbErrorMapping('users.list', async () => {
+        let query = db
+          .withSchema(IDENTITY)
+          .selectFrom('users')
+          .selectAll()
+          .orderBy('created_at', 'asc')
+          .limit(filters.limit + 1);
+
+        if (filters.emailContains) {
+          query = query.where('email', 'ilike', `%${filters.emailContains}%`);
+        }
+        if (filters.cursor) {
+          query = query.where('id', '>', filters.cursor);
+        }
+
+        const rows = await query.execute();
+        const hasMore = rows.length > filters.limit;
+        const trimmed = hasMore ? rows.slice(0, filters.limit) : rows;
+        const lastId = trimmed[trimmed.length - 1]?.id ?? null;
+        return {
+          users: trimmed.map(mapRowToUser),
+          nextCursor: hasMore && lastId ? lastId : null,
+        };
+      });
+    },
+
+    async count(): Promise<number> {
+      return withDbErrorMapping('users.count', async () => {
+        const row = await db
+          .withSchema(IDENTITY)
+          .selectFrom('users')
+          .select((eb) => eb.fn.count<number>('id').as('total'))
+          .executeTakeFirstOrThrow();
+        const total = (row as unknown as { total: string | number }).total;
+        return typeof total === 'string' ? parseInt(total, 10) : total;
       });
     },
   };
