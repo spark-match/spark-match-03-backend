@@ -53,7 +53,6 @@
     "vitest": "^2.0.0"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^7.1.0",
     "@aws-lambda-powertools/idempotency": "^2.10.0",
     "@aws-lambda-powertools/logger": "^2.10.0",
     "@aws-lambda-powertools/metrics": "^2.10.0",
@@ -68,9 +67,8 @@
     "@middy/http-header-normalizer": "^7.7.0",
     "@middy/http-json-body-parser": "^7.7.0",
     "@middy/validator": "^7.7.0",
-    "kysely": "^0.27.0",
+    "kysely": "^0.29.0",
     "pg": "^8.12.0",
-    "pino": "^9.4.0",
     "zod": "^3.23.0"
   },
   "engines": {
