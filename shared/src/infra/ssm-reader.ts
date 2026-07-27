@@ -23,7 +23,7 @@ export interface SsmReader {
 export function createSsmReader(defaultMaxAge = DEFAULT_MAX_AGE_SECONDS): SsmReader {
   return {
     async getString(name: string, maxAge = defaultMaxAge): Promise<string | undefined> {
-      let value: string | { Value: string } | undefined;
+      let value: string | undefined;
       try {
         value = await getParameter(name, {
           maxAge,
@@ -33,11 +33,7 @@ export function createSsmReader(defaultMaxAge = DEFAULT_MAX_AGE_SECONDS): SsmRea
         if (err instanceof ApiError) throw err;
         throw ApiError.awsUnavailable(DEPENDENCY, err);
       }
-      if (typeof value === 'string') return value;
-      if (typeof value === 'object' && value !== null && 'Value' in value) {
-        return value.Value;
-      }
-      return undefined;
+      return value;
     },
 
     async getRequiredString(name: string, maxAge = defaultMaxAge): Promise<string> {
