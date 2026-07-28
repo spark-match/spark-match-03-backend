@@ -119,4 +119,13 @@ describe('PATCH /me handler', () => {
     expect(result.statusCode).toBe(400);
     expect(mockUpdateUser).not.toHaveBeenCalled();
   });
+
+  it('returns 401 when the authorizer context is missing', async () => {
+    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
+      makeEvent({ fullName: 'New Name' }),
+    )) as { statusCode: number; body: string };
+
+    expect(result.statusCode).toBe(401);
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
 });

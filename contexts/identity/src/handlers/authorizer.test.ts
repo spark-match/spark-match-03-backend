@@ -119,4 +119,31 @@ describe('HttpApi Authorizer handler', () => {
     expect(result.isAuthorized).toBe(true);
     expect(result.context?.userId).toBe('user-2');
   });
+
+  it('defaults email and role to empty string when claims lack string values', async () => {
+    mockVerifyJwt.mockResolvedValue({
+      sub: 'user-3',
+      email: 42 as unknown as string,
+      role: null as unknown as string,
+    });
+
+    const result = await handler(makeEvent('Bearer token-no-email-role'));
+
+    expect(result.isAuthorized).toBe(true);
+    expect(result.context).toEqual({
+      userId: 'user-3',
+      email: '',
+      role: '',
+    });
+  });
+
+  it('denies when event.headers is undefined', async () => {
+    const ev = makeEvent(undefined);
+    (ev as unknown as { headers: undefined }).headers = undefined;
+
+    const result = await handler(ev);
+
+    expect(result.isAuthorized).toBe(false);
+    expect(mockLoadJwtSecret).not.toHaveBeenCalled();
+  });
 });
