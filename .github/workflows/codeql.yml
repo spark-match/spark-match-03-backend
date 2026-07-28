@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Spark Match
+# =============================================================================
+# CodeQL - Static analysis for security vulnerabilities
+# =============================================================================
+# Caller wrapper for the reusable workflow in spark-match-01-devops:
+#   spark-match/spark-match-01-devops/.github/workflows/codeql.yml@main
+#
+# Languages scanned: javascript (covers TypeScript) + actions (YAML).
+# Query pack: security-extended (more coverage than default `security`,
+# includes security-and-quality findings).
+#
+# PR gating: fails on any alert at severity >= warning introduced by the
+# PR diff. Existing findings on main/dev upload to Security tab but do
+# not block (push runs do not fail on alerts).
+#
+# Required follow-up (one-time, after this PR merges):
+#   - Disable GitHub "Default CodeQL setup" via Settings -> Code security
+#     and analysis, to avoid duplicate analysis. See AGENTS.md for the
+#     `gh api` command (codified, no UI).
+#
+# Triggers:
+#   - push to main + dev       (defense in depth, upload only, no gate)
+#   - pull_request to main+dev (gate on new findings at severity >= warning)
+#   - weekly Monday 06:17 UTC  (low contention slot)
+# =============================================================================
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+# Cancel in-progress runs for the same ref. CodeQL is idempotent and the
+# `init` action handles cancellation safely by short-circuiting.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: "Analyze (${{ matrix.language }})"
+    uses: spark-match/spark-match-01-devops/.github/workflows/codeql.yml@main
+    with:
+      languages: 'javascript,actions'
+      build-mode: 'none'
+      queries-pack: 'security-extended'
+      fail-on-alerts: true
+      fail-on-severity: 'warning'
+      paths-ignore: |
+        docs/**
+        **/*.md
+        coverage/**
+        node_modules/**
+        shared/dist/**
+        contexts/**/dist/**
+        scripts/**
+        .github/CODEOWNERS
