@@ -10,7 +10,7 @@
 // `details.length >= 1` always holds.
 // =============================================================================
 
-import type { ZodIssue } from 'zod';
+import type { $ZodIssue } from 'zod/v4/core';
 import type { ErrorDetail } from './error-detail.js';
 
 export type ApiErrorCode =
@@ -150,7 +150,7 @@ export class ApiError extends Error {
 
   /** Convert Zod issues into a 400 ApiError with one ErrorDetail per issue. */
   static fromZodError(
-    error: { issues: ZodIssue[] },
+    error: { issues: $ZodIssue[] },
     fallbackMessage = 'Validation failed',
   ): ApiError {
     const details: ErrorDetail[] = error.issues.map((issue) => ({
