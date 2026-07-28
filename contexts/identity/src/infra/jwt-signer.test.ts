@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGetRequiredString } = vi.hoisted(() => ({
-  mockGetRequiredString: vi.fn(),
-}));
-
 vi.mock('@spark-match/shared/infra', async () => {
   const actual =
     await vi.importActual<typeof import('@spark-match/shared/infra')>('@spark-match/shared/infra');
