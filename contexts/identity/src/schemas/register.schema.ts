@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const RegisterInputSchema = z.object({
-  email: z.string().email().max(200),
+  email: z.email().max(200),
   password: z.string().min(8).max(100),
   fullName: z.string().min(2).max(200),
   age: z.number().int().min(13).max(120).optional(),
@@ -10,8 +10,8 @@ export const RegisterInputSchema = z.object({
 export type RegisterInput = z.infer<typeof RegisterInputSchema>;
 
 export const RegisterOutputSchema = z.object({
-  id: z.string().uuid(),
-  email: z.string().email(),
+  id: z.uuid(),
+  email: z.email(),
   fullName: z.string(),
   createdAt: z.string(),
 });

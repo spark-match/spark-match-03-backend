@@ -23,7 +23,7 @@ import type { Tracer } from '@aws-lambda-powertools/tracer';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import type { ZodTypeAny } from 'zod';
+import type { ZodType } from 'zod';
 import { type AuthContext, requireAuth } from '../auth/index.js';
 import { ApiError, formatError, formatResponse } from '../http/index.js';
 import { validatePayload } from '../events/schema-validator.js';
@@ -38,7 +38,7 @@ export interface HandlerConfig<TInput, TOutput> {
   /** Optional name for logging context. */
   name?: string;
   /** Zod schema for request body validation. */
-  inputSchema: ZodTypeAny;
+  inputSchema: ZodType;
   /** The business logic. */
   handler: Handler<TInput, TOutput>;
   /** Logger instance (per-context). */
