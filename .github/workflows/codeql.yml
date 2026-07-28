@@ -54,7 +54,7 @@ jobs:
       languages: 'javascript,actions'
       build-mode: 'none'
       queries-pack: 'security-extended'
-      fail-on-alerts: 'true'
+      fail-on-alerts: true
       fail-on-severity: 'warning'
       paths-ignore: |
         docs/**
