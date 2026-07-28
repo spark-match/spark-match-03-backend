@@ -8,7 +8,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createUserService } from '../src/service/user-service.js';
-import { ApiError } from '@spark-match/shared/http';
 import type { User, UserRole } from '../src/domain/user.js';
 
 const ADMIN_ID = '11111111-1111-1111-1111-111111111111';
