@@ -49,23 +49,7 @@ pnpm-debug.log*
 # Lambda Layers artifacts
 layers/*/node_modules/
 layers/*/dist/
-layers/*/python/
 layers/*/*.zip
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-.venv/
-venv/
-env/
-.uv-cache/
-*.egg-info/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
 
 # Terraform (por si acaso)
 .terraform/

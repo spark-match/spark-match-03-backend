@@ -10,7 +10,7 @@
 | ADR | Title | Status | Date |
 |---|---|---|---|
 | [ADR-001](adr/001-serverless-lambda-over-ecs-fargate.md) | Serverless (Lambda) sobre ECS Fargate | Aceptado | 2026-06-30 |
-| [ADR-002](adr/002-hybrid-typescript-python-by-context.md) | Híbrido TypeScript + Python por contexto | Aceptado | 2026-06-30 |
+| [ADR-002](adr/002-hybrid-typescript-python-by-context.md) | Híbrido TypeScript + Python por contexto | **Deprecado** (2026-07-28: este repo es TS-only) | 2026-06-30 / 2026-07-28 |
 | [ADR-003](adr/003-5-bounded-contexts.md) | 5 Bounded Contexts | Aceptado | 2026-06-30 |
 | [ADR-004](adr/004-aws-sam-for-lambda-packaging.md) | AWS SAM para empaquetar Lambdas | Aceptado | 2026-06-30 |
 | [ADR-005](adr/005-eventbridge-as-primary-event-bus.md) | EventBridge como bus principal de eventos | Aceptado | 2026-06-30 |
@@ -20,7 +20,7 @@
 | [ADR-009](adr/009-http-api-gateway-v2-over-rest.md) | HTTP API Gateway v2 sobre REST API | Aceptado | 2026-06-30 |
 | [ADR-010](adr/010-monorepo-with-npm-workspaces.md) | Monorepo con npm workspaces | Aceptado | 2026-06-30 |
 | [ADR-011](adr/011-idempotency-by-event-id.md) | Idempotencia por eventId en handlers async | Aceptado | 2026-06-30 |
-| [ADR-012](adr/012-hybrid-backend-lambda-plus-python-server.md) | Backend híbrido — Lambda (Node/Py) + servidor Python dedicado | Aceptado | 2026-07-06 |
+| [ADR-012](adr/012-hybrid-backend-lambda-plus-python-server.md) | Backend híbrido — Lambda (Node/Py) + servidor Python dedicado | **Deprecado parcialmente** (2026-07-28: Lambda Python → Lambda TS; AI Advisor sigue en repo separado) | 2026-07-06 / 2026-07-28 |
 | [ADR-013](adr/013-middy-zod-powertools-stack.md) | Stack Middy + Zod + Lambda Powertools (NO NestJS/Spring/Quarkus) | Aceptado | 2026-07-06 |
 | [ADR-014](adr/014-observability-with-powertools-not-otel.md) | Observabilidad con Powertools (NO OpenTelemetry) | Aceptado | 2026-07-06 |
 
