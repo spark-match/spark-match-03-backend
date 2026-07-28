@@ -94,4 +94,13 @@ describe('PUT /me/password handler', () => {
     expect(result.statusCode).toBe(400);
     expect(mockChangePassword).not.toHaveBeenCalled();
   });
+
+  it('returns 401 when the authorizer context is missing', async () => {
+    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
+      makeEvent({ newPassword: 'newSecurePass456' }),
+    )) as { statusCode: number; body: string };
+
+    expect(result.statusCode).toBe(401);
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
 });
