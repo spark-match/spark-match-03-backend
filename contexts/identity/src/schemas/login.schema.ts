@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const LoginInputSchema = z.object({
-  email: z.string().email().max(200),
+  email: z.email().max(200),
   password: z.string().min(8).max(100),
 });
 
@@ -11,8 +11,8 @@ export const LoginOutputSchema = z.object({
   accessToken: z.string(),
   expiresIn: z.number().int(),
   user: z.object({
-    id: z.string().uuid(),
-    email: z.string().email(),
+    id: z.uuid(),
+    email: z.email(),
     fullName: z.string(),
   }),
 });
