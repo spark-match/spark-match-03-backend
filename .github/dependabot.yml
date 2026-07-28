@@ -46,7 +46,7 @@ updates:
     # Reviewers should assess breaking-change scope before merging.
     #
     # Ignore paths we don't want Dependabot to touch (Lambda layers built
-    # separately; Python handled by data-pipeline repo).
+    # separately).
     ignore:
       - dependency-name: "*"
         versions:
