@@ -7,10 +7,11 @@
 // event payloads.
 // =============================================================================
 
-import { z, type ZodSchema } from 'zod';
+import { z } from 'zod';
+import type { ZodType } from 'zod';
 import { ApiError } from '../http/api-error.js';
 
-export function validatePayload<T>(schema: ZodSchema<T>, payload: unknown): T {
+export function validatePayload<T>(schema: ZodType<T>, payload: unknown): T {
   const result = schema.safeParse(payload);
   if (!result.success) {
     throw ApiError.fromZodError(result.error);
@@ -26,14 +27,14 @@ export function validatePayload<T>(schema: ZodSchema<T>, payload: unknown): T {
  */
 export const EventEnvelopeSchema = z.object({
   version: z.string(),
-  id: z.string().uuid(),
+  id: z.uuid(),
   'detail-type': z.string(),
   source: z.string(),
   account: z.string(),
   time: z.string(),
   region: z.string(),
   resources: z.array(z.string()),
-  detail: z.record(z.unknown()),
+  detail: z.record(z.string(), z.unknown()),
 });
 
 export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;
