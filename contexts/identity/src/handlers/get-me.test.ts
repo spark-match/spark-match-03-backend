@@ -126,4 +126,13 @@ describe('GET /me handler - happy path', () => {
 
     expect(mockGetUser).toHaveBeenCalledWith({ actorUserId: SELF_ID, targetUserId: SELF_ID });
   });
+
+  it('returns 401 when the authorizer context is missing', async () => {
+    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
+      makeEvent(),
+    )) as { statusCode: number; body: string };
+
+    expect(result.statusCode).toBe(401);
+    expect(mockGetUser).not.toHaveBeenCalled();
+  });
 });
