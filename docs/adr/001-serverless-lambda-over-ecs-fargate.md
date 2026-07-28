@@ -35,7 +35,7 @@ El backend de Spark Match debe servir a una audiencia de tamaño piloto (TFP). L
 **Mitigaciones**:
 - **Provisioned Concurrency** solo para Lambdas críticas (chat con Bedrock) si el cold start duele
 - Mantener dependencias mínimas (Lambda package <50MB)
-- Runtime Node.js 20 / Python 3.12 (cold starts optimizados)
+- Runtime Node.js 24 (cold starts optimizados)
 
 ---
 

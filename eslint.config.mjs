@@ -12,7 +12,6 @@ export default tseslint.config(
       'coverage/**',
       'layers/*/dist/**',
       'layers/*/node_modules/**',
-      'layers/*/python/**',
       '**/*.config.js',
       '**/*.config.cjs',
       '**/*.config.ts',

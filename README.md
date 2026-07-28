@@ -1,7 +1,7 @@
 # Spark Match Backend
 
-> **Serverless DDD+EDA monolith** built on AWS Lambda + TypeScript + Python.
-> Hybrid architecture: Lambda for CRUD/EDA in TypeScript; the Python AI Advisor lives in the sibling repo [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/).
+> **Serverless DDD+EDA monolith** built on AWS Lambda + TypeScript (Node.js).
+> The Python AI Advisor lives in the sibling repo [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/) (Python + LangChain + AWS Bedrock).
 >
 > _Last verified against `spark-match-01-devops@main` (PR #117, 26 Jul 2026): SonarCloud CI improvements active — fail-loud on QG timeout, cached `~/.sonar`, architecture sensor skipped._
 > _Dependency snapshot (PR #55, 28 Jul 2026): TypeScript 6, Node.js 24, vitest 4, ESLint 10, Zod 4, jose 6.2.4._
@@ -26,9 +26,7 @@
 ### Prerequisites
 
 - Node.js 24+ (`node --version`)
-- Python 3.12+ (`python --version`)
 - AWS SAM CLI 1.151+ (`sam --version`)
-- uv 0.11+ (`uv --version`)
 - AWS CLI configured with `spark-match-prod` profile
 
 ### Install
@@ -99,16 +97,16 @@ sam deploy --config-env prod
    └───┬──────────┬──────────┬────────────┘
        │          │          │
        ▼          ▼          ▼
-  ┌─────────┐  ┌──────┐  ┌─────────┐
-  │Matching │  │Notif │  │  AI     │  ← Python Lambdas + cross-cutting handlers
-  │  (Py)   │  │      │  │ Advisor │
+┌─────────┐  ┌──────┐  ┌─────────┐
+  │Matching │  │Notif │  │  AI     │  ← TypeScript Lambdas + cross-cutting handlers
+  │  (TS)   │  │  (TS)  │  │ Advisor │
   └─────────┘  └──────┘  └─────────┘
-                            │
-                            │ (HTTP, no in this repo)
-                            ▼
-                     ┌────────────────┐
-                     │ 08-deep-agent  │  ← Separate repo, AgentCore Runtime
-                     │ (FastAPI +     │
+                             │
+                             │ (HTTP, no in this repo)
+                             ▼
+                      ┌────────────────┐
+                      │ 08-deep-agent  │  ← Separate repo, AgentCore Runtime
+                      │ (FastAPI +     │
                      │  LangGraph)    │
                      └────────────────┘
 ```
@@ -123,60 +121,47 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 ├── tsconfig.base.json        # TypeScript config (strict mode)
 ├── template.yaml             # SAM template (root orchestrator)
 ├── samconfig.toml            # SAM config per environment
-├── pyproject.toml            # Python deps (uv/pip)
-├── .eslintrc.cjs             # ESLint
+├── eslint.config.mjs         # ESLint 10 (flat config)
 ├── .prettierrc               # Prettier
-├── ruff.toml                 # Python linter
-├── vitest.config.ts          # Test runner
+├── vitest.config.mts         # Test runner (vitest 4)
 │
 ├── shared/                   # @spark-match/shared (npm workspace)
 │   ├── src/
-│   │   ├── auth/             # JWT decode, password hash
+│   │   ├── auth/             # JWT (jose), password hash (scrypt)
 │   │   ├── http/             # ApiResponse, ApiError
 │   │   ├── logger/           # Powertools Logger wrapper
 │   │   ├── events/           # EventBridge client, schema validator
 │   │   ├── infra/            # SSM reader, Secrets reader
 │   │   └── templates/        # buildHandler() pattern
-│   └── tests/
 │
 ├── layers/                   # Lambda Layers
 │   ├── node-shared/          # Compiled shared/ utilities
-│   └── node-runtime/         # zod, middy, powertools, kysely, pg
+│   └── node-runtime/         # zod, middy, powertools, kysely, pg, jose
 │
-├── contexts/                 # 5 Bounded Contexts
-│   ├── identity/             # TS - auth, users, profiles
-│   ├── assessment/           # TS - RIASEC, Big Five
-│   ├── career/               # TS - careers catalog
-│   └── matching/             # Python - affinity, scoring
+├── contexts/                 # Bounded Contexts (TypeScript)
+│   └── identity/             # auth, users, profiles
 │
-├── events/                   # Cross-cutting event handlers
-│   ├── notifications/        # emails via SES
-│   └── analytics/            # ETL to S3
-│
-├── tests/
-│   ├── unit/
-│   ├── integration/          # LocalStack + testcontainers
-│   └── contract/             # JSON Schema validation
-│
-├── scripts/
-│   ├── seed-db.py
-│   ├── publish-schemas.ts
-│   └── deploy-all.sh
+├── migrations/               # node-pg-migrate SQL files (V001+)
 │
 ├── docs/
 │   ├── ARCHITECTURE.md
-│   ├── DECISIONS.md
+│   ├── DECISIONS.md          # ADR index
+│   ├── adr/                  # One file per ADR (Nygard template)
 │   ├── EVENT_CATALOG.md
 │   ├── FOLDER_STRUCTURE.md
 │   └── OBSERVABILITY.md
 │
 └── .github/
     ├── CODEOWNERS            # Per-context ownership
+    ├── dependabot.yml        # Weekly npm updates
     ├── workflows/
     │   ├── ci.yml
     │   └── deploy.yml
     └── pull_request_template.md
 ```
+
+Note: this repo is TypeScript only. The Python AI Advisor lives in
+[`spark-match-08-deep-agent`](../spark-match-08-deep-agent/).
 
 ## 🎯 Team
 
@@ -197,7 +182,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 | 3 | Lambda Layers production-ready | ⏳ |
 | 4 | Assessment context | ⏳ |
 | 5 | Career context | ⏳ |
-| 6 | Matching context (Python Lambda) | ⏳ |
+| 6 | Matching context | ⏳ |
 | 7 | Notifications + observability | ⏳ |
 | 8 | E2E integration tests | ⏳ |
 

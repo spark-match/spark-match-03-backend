@@ -9,7 +9,7 @@
 spark-match-03-backend/
 ├── README.md                       # Quickstart + enlaces a ARCHITECTURE.md
 ├── ARCHITECTURE.md                 # Diseño general (este repo)
-├── DECISIONS.md                    # ADRs
+├── DECISIONS.md                    # ADR index
 ├── EVENT_CATALOG.md                # Catálogo de eventos de dominio
 ├── FOLDER_STRUCTURE.md             # Este documento
 │
@@ -17,47 +17,28 @@ spark-match-03-backend/
 ├── samconfig.toml                  # Configuración SAM por entorno
 ├── package.json                    # npm workspaces (raíz)
 ├── package-lock.json
-├── pyproject.toml                  # Deps Python (uv/pip)
-├── uv.lock
 ├── tsconfig.base.json              # TS config compartido
-├── .eslintrc.cjs                   # ESLint (TS)
+├── eslint.config.mjs               # ESLint 10 (flat config)
 ├── .prettierrc                     # Prettier
-├── ruff.toml                       # Ruff (Python)
 │
 ├── shared/                         # Shared Kernel (mínimo)
-│   ├── domain/                     # AggregateRoot, DomainEvent, ValueObject base
-│   ├── infrastructure/             # EventBridgeClient, Logger, SsmReader
-│   └── contracts/                  # JSON Schemas de eventos v1
+│   ├── src/                        # TS source (auth, http, events, infra, templates, logger)
+│   └── contracts/                  # JSON Schemas de eventos v1 (planned)
 │
-├── contexts/                       # Bounded Contexts (uno por carpeta)
-│   ├── identity/                   # TypeScript
-│   ├── assessment/                 # TypeScript
-│   ├── career/                     # TypeScript
-│   ├── matching/                   # Python
-│   └── ai-advisor/                 # Python
+├── contexts/                       # Bounded Contexts (uno por carpeta, todos TypeScript)
+│   └── identity/                   # auth, users, profiles
 │
 ├── layers/                         # Lambda Layers
-│   ├── python-runtime/             # boto3, langchain, pgvector
-│   └── node-runtime/               # @aws-sdk/*, zod, jsonwebtoken
+│   └── node-runtime/               # zod, middy, powertools, kysely, pg, jose
 │
-├── events/                         # Event handlers cross-cutting (async)
-│   ├── notifications/              # Python o TS según consumidor
-│   └── analytics/                  # Python (ETL a S3)
+├── migrations/                     # node-pg-migrate SQL files (V001+)
 │
-├── tests/
-│   ├── unit/                       # Vitest (TS) + pytest (Py)
-│   ├── integration/                # LocalStack + testcontainers
-│   └── contract/                   # Validación JSON Schema end-to-end
-│
-├── scripts/
-│   ├── seed-db.py                  # Seed inicial de carreras (RIASEC profile)
-│   ├── publish-schemas.ts          # Publicar JSON Schemas a EventBridge Registry
-│   └── local-api.sh                # Wrapper de `sam local start-api`
+├── tests/                          # Test runner config + setup
 │
 └── .github/
     └── workflows/
         ├── ci.yml                  # Lint + tests (caller de 01-devops)
-        └── deploy.yml              # sam deploy (caller de 01-devops)
+        └── deploy.yml              # sam deploy (manual workflow_dispatch)
 ```
 
 ## 2. Reglas del Shared Kernel
@@ -82,12 +63,12 @@ El `shared/` contiene código que **todos los contextos** necesitan. Las reglas 
 ### 2.3 Versionado del shared kernel
 
 - Cambios incompatibles requieren PR con tag `breaking-change`
-- Cada contexto declara en su `package.json` o `pyproject.toml` la versión que necesita
+- Cada contexto declara en su `package.json` la versión que necesita
 - CI verifica que no se rompe compatibilidad accidentalmente
 
 ## 3. Estructura interna de un Bounded Context
 
-Cada contexto sigue la misma forma (con variaciones de lenguaje):
+Cada contexto sigue la misma forma (todo en TypeScript):
 
 ```
 contexts/<name>/
@@ -137,13 +118,16 @@ interfaces  →  application  →  domain
 
 ### 3.2 Lenguaje por contexto
 
-| Contexto | Lenguaje | Carpeta `interfaces/lambdas/<action>/` |
+Este repo es **100% TypeScript** (Node.js 24). Los contextos futuros siguen la misma convención:
+
+| Contexto | Lenguaje | Carpeta `handlers/<action>.ts` |
 |---|---|---|
-| identity | TypeScript | `handler.ts`, `handler.test.ts` |
-| assessment | TypeScript | `handler.ts`, `handler.test.ts` |
-| career | TypeScript | `handler.ts`, `handler.test.ts` |
-| matching | Python | `handler.py`, `test_handler.py` |
-| ai-advisor | Python | `handler.py`, `test_handler.py` |
+| identity | TypeScript | `register.ts`, `register.test.ts` |
+| assessment | TypeScript | `start.ts`, `start.test.ts` |
+| career | TypeScript | `search.ts`, `search.test.ts` |
+| matching | TypeScript | `recommend.ts`, `recommend.test.ts` |
+
+El AI Advisor (Python) vive en [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/), no en este repo.
 
 ## 4. Naming conventions
 
@@ -152,9 +136,7 @@ interfaces  →  application  →  domain
 | Tipo | Convención | Ejemplo |
 |---|---|---|
 | TypeScript module | `kebab-case.ts` | `user-repository.ts` |
-| Python module | `snake_case.py` | `user_repository.py` |
 | Test (TS) | `<module>.test.ts` | `user-repository.test.ts` |
-| Test (Py) | `test_<module>.py` | `test_user_repository.py` |
 | JSON Schema | `<event-name>.v<version>.json` | `user-registered.v1.json` |
 
 ### 4.2 Identificadores
@@ -162,13 +144,10 @@ interfaces  →  application  →  domain
 | Tipo | Convención | Ejemplo |
 |---|---|---|
 | Classes (TS) | `PascalCase` | `UserAggregate` |
-| Classes (Py) | `PascalCase` | `UserAggregate` |
 | Functions (TS) | `camelCase` | `registerUser` |
-| Functions (Py) | `snake_case` | `register_user` |
 | Constants | `UPPER_SNAKE_CASE` | `MAX_LOGIN_ATTEMPTS` |
 | Env vars | `UPPER_SNAKE_CASE` | `JWT_SECRET_ARN` |
 | TypeScript types | `PascalCase` | `UserRegisteredEvent` |
-| Python types | `PascalCase` | `UserRegisteredEvent` |
 | DB tables | `snake_case` | `user_profiles` |
 | DB columns | `snake_case` | `created_at` |
 
@@ -205,11 +184,11 @@ interfaces  →  application  →  domain
 4. **Registrar en `template.yaml`**:
    ```yaml
    Resources:
-     RegisterUserFunction:
-       Type: AWS::Serverless::Function
-       Properties:
-         Handler: contexts/identity/interfaces/lambdas/register-user/handler.handler
-         Runtime: nodejs20.x
+RegisterUserFunction:
+        Type: AWS::Serverless::Function
+        Properties:
+          Handler: contexts/identity/src/handlers/register.handler
+          Runtime: nodejs24.x
          MemorySize: 256
          Timeout: 10
          Events:
@@ -265,7 +244,7 @@ interfaces  →  application  →  domain
 2. **Definir README** del contexto con:
    - Responsabilidad
    - Aggregates principales
-   - Lenguaje (TS o Py)
+   - Lenguaje (TypeScript)
    - Storage schema
 
 3. **Definir aggregates y eventos** (ver sección 5/6)
@@ -290,28 +269,24 @@ interfaces  →  application  →  domain
 Las layers se construyen localmente y se suben como assets de SAM:
 
 ```
-layers/python-runtime/
-├── python/
-│   ├── boto3/             # incluido en runtime, pero versionado explícito
-│   ├── langchain/
-│   ├── pgvector/
-│   └── ...
-└── buildspec.yml          # script de build con uv
-
 layers/node-runtime/
 ├── nodejs/
 │   ├── node_modules/
-│   │   ├── @aws-sdk/
 │   │   ├── zod/
-│   │   └── ...
-└── package.json
+│   │   ├── middy/
+│   │   ├── @aws-lambda-powertools/
+│   │   ├── kysely/
+│   │   ├── pg/
+│   │   └── jose/
+│   └── package.json
+└── build.sh
 ```
 
 **Reglas**:
 
 - Layer nunca incluye el runtime (eso lo gestiona AWS Lambda)
 - Layer máximo 50MB (compressed)
-- Build reproducible: pin de versiones en `pyproject.toml` / `package.json`
+- Build reproducible: pin de versiones en `package.json`
 
 ## 9. Configuración por entorno
 
