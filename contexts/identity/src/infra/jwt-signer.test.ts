@@ -16,8 +16,14 @@ vi.mock('@spark-match/shared/infra', async () => {
 
 vi.mock('@aws-sdk/client-secrets-manager', () => {
   const send = vi.fn();
-  const GetSecretValueCommand = vi.fn().mockImplementation((input: { SecretId: string }) => ({ input }));
-  const SecretsManagerClient = vi.fn().mockImplementation(() => ({ send }));
+  const GetSecretValueCommand = vi
+    .fn()
+    .mockImplementation(function(input: { SecretId: string }) {
+      return { input };
+    });
+  const SecretsManagerClient = vi.fn().mockImplementation(function() {
+    return { send };
+  });
   return { SecretsManagerClient, GetSecretValueCommand, send };
 });
 
