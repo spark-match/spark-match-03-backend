@@ -2,7 +2,7 @@
   "name": "@spark-match/backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Spark Match backend - serverless DDD+EDA on AWS Lambda with TypeScript and Python",
+  "description": "Spark Match backend - serverless DDD+EDA on AWS Lambda with TypeScript (Node.js)",
   "workspaces": [
     "shared",
     "contexts/*",
