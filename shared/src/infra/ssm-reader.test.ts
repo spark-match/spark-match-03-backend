@@ -32,23 +32,11 @@ describe('createSsmReader.getString', () => {
     expect(await reader.getString('missing')).toBeUndefined();
   });
 
-  it('returns undefined when SSM returns null', async () => {
-    mockedGetParameter.mockResolvedValue(null);
-    const reader = createSsmReader();
-    expect(await reader.getString('null-param')).toBeUndefined();
-  });
-
-  it('returns the Value property when SSM returns an SSM-shaped object', async () => {
-    mockedGetParameter.mockResolvedValue({ Value: 'object-value' });
-    const reader = createSsmReader();
-    expect(await reader.getString('obj-param')).toBe('object-value');
-  });
-
-  it('returns undefined when SSM returns an object without Value', async () => {
-    mockedGetParameter.mockResolvedValue({ foo: 'bar' });
-    const reader = createSsmReader();
-    expect(await reader.getString('weird-param')).toBeUndefined();
-  });
+  // Note: as of @aws-lambda-powertools/parameters 2.34.0, getParameter normalizes
+  // the SSM SDK response and always returns `string | undefined`. The wrapper
+  // `{ Value: string }` shape and arbitrary `null` returns that existed in
+  // 2.33.x are no longer possible — the library handles them internally.
+  // We therefore only test the supported outputs (string and undefined).
 
   it('uses the provided maxAge when supplied', async () => {
     mockedGetParameter.mockResolvedValue('x');
