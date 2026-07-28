@@ -1,12 +1,14 @@
 # Spark Match Backend
 
 > **Serverless DDD+EDA monolith** built on AWS Lambda + TypeScript + Python.
-> Hybrid architecture: Lambda for CRUD/EDA, dedicated Python server for the AI Advisor (in [`08-deep-agent`](../08-deep-agent/)).
+> Hybrid architecture: Lambda for CRUD/EDA in TypeScript; the Python AI Advisor lives in the sibling repo [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/).
 >
 > _Last verified against `spark-match-01-devops@main` (PR #117, 26 Jul 2026): SonarCloud CI improvements active — fail-loud on QG timeout, cached `~/.sonar`, architecture sensor skipped._
+> _Dependency snapshot (PR #55, 28 Jul 2026): TypeScript 6, Node.js 24, vitest 4, ESLint 10, Zod 4, jose 6.2.4._
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
-[![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-24-green.svg)](https://nodejs.org/)
+[![Vitest](https://img.shields.io/badge/Vitest-4-yellow.svg)](https://vitest.dev/)
 [![AWS SAM](https://img.shields.io/badge/AWS-SAM-orange.svg)](https://aws.amazon.com/serverless/sam/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE)
 
@@ -23,7 +25,7 @@
 
 ### Prerequisites
 
-- Node.js 20+ (`node --version`)
+- Node.js 24+ (`node --version`)
 - Python 3.12+ (`python --version`)
 - AWS SAM CLI 1.151+ (`sam --version`)
 - uv 0.11+ (`uv --version`)
