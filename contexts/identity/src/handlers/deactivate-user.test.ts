@@ -111,4 +111,13 @@ describe('POST /users/{userId}/deactivate handler', () => {
     expect(result.statusCode).toBe(400);
     expect(mockDeactivateUser).not.toHaveBeenCalled();
   });
+
+  it('returns 401 when the authorizer context is missing', async () => {
+    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
+      makeEvent({ userId: TARGET_ID }),
+    )) as { statusCode: number; body: string };
+
+    expect(result.statusCode).toBe(401);
+    expect(mockDeactivateUser).not.toHaveBeenCalled();
+  });
 });

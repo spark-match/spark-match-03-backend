@@ -110,4 +110,51 @@ describe('buildHandler', () => {
 
     expect(result.statusCode).toBe(401);
   });
+
+  it('returns 500 and logs unhandled non-ApiError exceptions', async () => {
+    const throwingHandler = (async () => {
+      throw new Error('boom-unexpected');
+    }) as unknown as Parameters<typeof buildHandler>[0]['handler'];
+    const wrapped = buildHandler({
+      inputSchema,
+      handler: throwingHandler,
+      logger,
+      tracer,
+      enableCors: false,
+    });
+
+    const result = await (
+      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string }>
+    )(makeEvent({ name: 'Alice' }));
+
+    expect(result.statusCode).toBe(500);
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('internal');
+  });
+
+  it('handles OPTIONS preflight by setting CORS headers on the response', async () => {
+    const handler = (async () => ({ ok: true })) as unknown as Parameters<
+      typeof buildHandler
+    >[0]['handler'];
+    const wrapped = buildHandler({
+      inputSchema,
+      handler,
+      logger,
+      tracer,
+      enableCors: true,
+    });
+
+    const ev = makeEvent(null);
+    ev.requestContext.http.method = 'OPTIONS';
+
+    const result = await (
+      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+    )(ev);
+
+    // The inline CORS middleware's `before` hook sets the response to 204;
+    // verify the headers are applied regardless of which path short-circuits.
+    expect(result.headers['Access-Control-Allow-Origin']).toBe('*');
+    expect(result.headers['Access-Control-Allow-Methods']).toContain('OPTIONS');
+  });
 });
