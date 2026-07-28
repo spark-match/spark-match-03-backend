@@ -17,13 +17,14 @@
 
 ### Decisión
 
-**Monorepo único** (`spark-match-03-backend`) con **npm workspaces** para TS y **uv** para Python. Estructura:
+**Monorepo único** (`spark-match-03-backend`) con **npm workspaces** para TypeScript (único lenguaje en este repo). Estructura:
 
 ```
 03-backend/
-├── shared/           # Shared kernel
-├── contexts/         # 5 bounded contexts
-├── layers/           # Lambda layers
+├── shared/           # @spark-match/shared (npm workspace)
+├── contexts/         # Bounded contexts (TypeScript)
+├── layers/           # Lambda layers (node-runtime)
+├── migrations/       # SQL files
 └── tests/
 ```
 

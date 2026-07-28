@@ -9,12 +9,12 @@ El backend de **Spark Match** está diseñado como una aplicación **serverless*
 | Aspecto | Decisión |
 |---|---|
 | Estilo arquitectónico | DDD + EDA + Serverless |
-| Compute | AWS Lambda (Node.js 20 + Python 3.12) |
+| Compute | AWS Lambda (Node.js 24, TypeScript) |
 | API | HTTP API Gateway v2 |
 | Event bus | EventBridge (bus custom `spark-match-events`) |
-| Persistencia | Aurora PostgreSQL Serverless v2 + pgvector |
+| Persistencia | Aurora PostgreSQL Serverless v2 |
 | Packaging | AWS SAM (Lambdas) + Terraform (infra) |
-| Lenguajes | TypeScript (CRUD, auth) + Python (IA/ML, data) |
+| Lenguaje | TypeScript (Node.js 24) — Python solo en `08-deep-agent` (AI Advisor) |
 | Estructura | Monorepo con workspaces |
 
 ## 2. Drivers arquitectónicos
@@ -75,7 +75,7 @@ Para una aplicación de **baja/media carga** (TFP con usuarios piloto), serverle
 |---|---|---|
 | Coste con baja carga | ~$0 (free tier cubre MVP) | ~$30/mes mínimo (cluster activo) |
 | Coste con picos | Auto-escala a 0 | Requiere over-provisioning |
-| Cold start | 200-400ms (Node/Py) | N/A (warm) |
+| Cold start | 200-400ms (Node.js) | N/A (warm) |
 | Ops | Cero (AWS gestiona runtime) | Parches, scaling, networking |
 | Madurez AWS | +10 años, estable | +10 años, estable |
 
@@ -91,10 +91,11 @@ Para Spark Match, serverless gana en **coste** y **operacional**. La penalizaci�
 └───────┬──────────┬──────────┬──────────┬──────────┬─────────────────┘
         │          │          │          │          │
         ▼          ▼          ▼          ▼          ▼
-   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
-   │Identity │ │Assessment│ │ Career  │ │Matching │ │AI Advisor│
-   │  (TS)   │ │  (TS)    │ │  (TS)   │ │  (Py)   │ │  (Py)    │
-   └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘
+┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
+    │Identity │ │Assessment│ │ Career  │ │Matching │ │AI Advisor│
+    │  (TS)   │ │  (TS)    │ │  (TS)   │ │  (TS)   │ │  (Py*)   │
+    └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘
+                                 *AI Advisor lives in spark-match-08-deep-agent (separate repo, not in this codebase)
         │          │           │           │           │
         ▼          ▼           ▼           ▼           ▼
    ┌─────────────────────────────────────────────────────────┐
@@ -141,23 +142,23 @@ Para Spark Match, serverless gana en **coste** y **operacional**. La penalizaci�
 - **Storage**: schema `career` en Aurora (`careers`, `career_skills`)
 - **Nota**: en el MVP es **read-only público**, escritura solo admin (seed data).
 
-#### Matching Context (Python)
+#### Matching Context (TypeScript)
 
 - **Responsabilidad**: cálculo de afinidad perfil ↔ carrera, generación de recomendaciones.
 - **Aggregates**: `Match`, `Recommendation`
 - **API síncrona**: `GET /v1/match/recommendations`, `GET /v1/match/{careerId}/affinity`
 - **Eventos consumidos**: `AssessmentCompleted` (trigger recálculo), `ProfileUpdated` (invalidación cache)
 - **Eventos emitidos**: `RecommendationGenerated`
-- **Storage**: schema `matching` en Aurora + Redis (cache opcional MVP)
+- **Storage**: schema `matching` en Aurora
 
-#### AI Advisor Context (Python)
+#### AI Advisor Context (Python — en repo separado)
 
 - **Responsabilidad**: chat conversacional con Bedrock, RAG sobre catálogo de carreras.
 - **Aggregates**: `Conversation`, `Message`, `KnowledgeDocument`
-- **API síncrona**: `POST /v1/chat/conversations`, `POST /v1/chat/conversations/{id}/messages`, `GET /v1/chat/conversations/{id}`
+- **API síncrona**: gestionada en [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/) (no en este repo).
 - **Eventos consumidos**: `CareerCreated/Updated` (trigger reindex RAG)
 - **Eventos emitidos**: `MessageSent`, `KnowledgeDocIngested`
-- **Storage**: schema `ai` en Aurora (`conversations`, `messages`) + tabla `embeddings` con pgvector
+- **Storage**: gestionado en el repo del agente (FastAPI + AWS Bedrock).
 
 ### 4.3 Contexto cross-cutting: Notifications
 
@@ -341,7 +342,7 @@ Todos los workflows de `03-backend` son **callers** de los workflows reutilizabl
 |---|---|
 | `ci.yml` | `lint-checks.yml` (actionlint + gitleaks + yamllint) |
 | `deploy.yml` | (pendiente: `sam-deploy.yml`) |
-| `test-unit.yml` | (pendiente: `node-python-tests.yml`) |
+| `test-unit.yml` | (pendiente: `node-tests.yml`) |
 
 ### 9.2 Orden de despliegue
 

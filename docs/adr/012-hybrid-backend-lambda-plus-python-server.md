@@ -1,11 +1,13 @@
 # ADR-012: Backend híbrido — Lambda (Node/Py) + servidor Python dedicado
 
 
-**Estado**: Aceptado · **Fecha**: 2026-07-06
+**Estado**: DEPRECADO (parcialmente) · **Fecha**: 2026-07-06 · **Actualizado**: 2026-07-28
 **Supersedes**: ADR-001 (parcialmente), alinea con `00-knowledge-base/decisions/ADR-001-backend-hibrido-lambda-mas-agente.md`
 **Relacionado**: `08-deep-agent/DEPLOYMENT.md`, `00-knowledge-base/docs/SDD/4_reglas-negocio-agente.md` §8
 
-### Contexto
+> **Nota de actualización (2026-07-28)**: La parte "Lambda Python" de este ADR ya no aplica — `spark-match-03-backend` es 100% TypeScript (campaña de dependencias PRs #41-#56). El Matching previsto se implementará también en TypeScript. Solo la parte "AI Advisor en repo separado" sigue vigente (AI Advisor vive en [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/), FastAPI + LangGraph + Bedrock).
+
+### Contexto (histórico)
 
 Existían 2 ADR-001 contradictorios en la organización:
 
@@ -17,7 +19,7 @@ El segundo es el correcto y se alinea con:
 - `08-deep-agent/DEPLOYMENT.md` (587 líneas) que recomienda Bedrock AgentCore Runtime
 - `docs/SDD/4_reglas-negocio-agente.md` §8 (Deltas respecto a 2_requirements y 3_design)
 
-### Opciones consideradas
+### Opciones consideradas (histórico)
 
 | Opción | Pros | Contras |
 |---|---|---|
@@ -25,16 +27,16 @@ El segundo es el correcto y se alinea con:
 | B. Todo servidor tradicional | Streaming natural, LangGraph funciona out-of-the-box | Costo ~$20/mes mínimo, contradice decisión serverless, ops burden |
 | **C. Híbrido (recomendado)** | Cada carga en su sitio: Lambda para CRUD/EDA, servidor Python para el agente con streaming | Dos entornos de despliegue que coordinar, dos IaC pipelines |
 
-### Decisión
+### Decisión (histórico, ahora actualizada)
 
 **Opción C — Backend híbrido con separación física por repo**:
 
-| Componente | Tecnología | Repo |
-|---|---|---|
-| **Identity, Assessment, Career** | Lambda TypeScript vía SAM | `03-backend` (este repo) |
-| **Matching** (afinidad, scoring) | Lambda Python vía SAM | `03-backend` (este repo) |
-| **Notifications** (cross-cutting) | Lambda Python/TS vía SAM | `03-backend` (este repo) |
-| **AI Advisor / Agente** (chat, RAG, Bedrock) | **Servidor Python FastAPI dedicado** (Bedrock AgentCore Runtime) | **`08-deep-agent`** (repo separado) |
+| Componente | Tecnología | Repo | Vigente |
+|---|---|---|---|
+| **Identity, Assessment, Career** | Lambda TypeScript vía SAM | `03-backend` (este repo) | ✅ |
+| **Matching** (afinidad, scoring) | Lambda TypeScript vía SAM | `03-backend` (este repo) | ✅ (antes Lambda Python) |
+| **Notifications** (cross-cutting) | Lambda TypeScript vía SAM | `03-backend` (este repo) | ✅ (antes Python/TS mixto) |
+| **AI Advisor / Agente** (chat, RAG, Bedrock) | **Servidor Python FastAPI dedicado** (Bedrock AgentCore Runtime) | **`08-deep-agent`** (repo separado) | ✅ |
 
 ### ¿Por qué el agente va en repo separado?
 

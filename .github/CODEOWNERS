@@ -31,7 +31,5 @@
 
 /.eslintrc.cjs                             @spark-match/backend-devs
 /.prettierrc                               @spark-match/backend-devs
-/pyproject.toml                            @spark-match/backend-devs
-/ruff.toml                                 @spark-match/backend-devs
 /samconfig.toml                            @spark-match/backend-devs
 /template.yaml                             @spark-match/backend-devs
