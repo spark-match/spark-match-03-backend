@@ -12,16 +12,22 @@ vi.mock('@aws-lambda-powertools/parameters/ssm', () => ({
 vi.mock('@aws-sdk/client-secrets-manager', () => {
   const GetSecretValueCommand = vi
     .fn()
-    .mockImplementation((input: { SecretId: string }) => ({ input }));
-  const SecretsManagerClient = vi.fn().mockImplementation(() => ({ send }));
-  return { SecretsManagerClient, GetSecretValueCommand };
+    .mockImplementation(function(input: { SecretId: string }) {
+      return { input };
+    });
+  const SecretsManagerClient = vi.fn().mockImplementation(function() {
+    return { send };
+  });
+  return { SecretsManagerClient, GetSecretValueCommand, send };
 });
 
 vi.mock('pg', () => {
   class FakePool {
     end = vi.fn().mockResolvedValue(undefined);
   }
-  const Pool = vi.fn().mockImplementation(() => new FakePool());
+  const Pool = vi.fn().mockImplementation(function() {
+    return new FakePool();
+  });
   return { Pool, __FakePool: FakePool };
 });
 

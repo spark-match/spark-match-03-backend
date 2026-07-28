@@ -1,11 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const send = vi.fn();
+const send = vi.hoisted(() => vi.fn());
 
 vi.mock('@aws-sdk/client-eventbridge', () => {
-  const PutEventsCommand = vi.fn().mockImplementation((input: { Entries: unknown[] }) => ({ input }));
-  const EventBridgeClient = vi.fn().mockImplementation(() => ({ send }));
-  return { EventBridgeClient, PutEventsCommand };
+  const PutEventsCommand = vi
+    .fn()
+    .mockImplementation(function(input: { Entries: unknown[] }) {
+      return { input };
+    });
+  const EventBridgeClient = vi.fn().mockImplementation(function() {
+    return { send };
+  });
+  return { EventBridgeClient, PutEventsCommand, send };
 });
 
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
