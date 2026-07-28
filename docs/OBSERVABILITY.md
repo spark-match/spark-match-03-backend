@@ -230,4 +230,4 @@ Esto automáticamente te da:
 - [Lambda Powertools TypeScript docs](https://docs.powertools.aws.dev/lambda/typescript/latest/)
 - [X-Ray pricing](https://aws.amazon.com/xray/pricing/)
 - [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/)
-- [ADR-014: Powertools vs OTel](../docs/DECISIONS.md#adr-014-observabilidad-con-powertools-no-opentelemetry)
+- [ADR-014: Powertools vs OTel](../docs/adr/014-observability-with-powertools-not-otel.md)

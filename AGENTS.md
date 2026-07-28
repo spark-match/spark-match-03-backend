@@ -1,12 +1,13 @@
 # AGENTS.md — Spark Match Backend (spark-match-03-backend)
 
 > Working agreement for AI agents (and humans) contributing to this repo.
-> Last updated: 26-jul-2026 (BACKEND-HARDENIN-26-07 cycle).
+> Last updated: 28-jul-2026 (Sprint 1 hygiene pass; PRs #55/#57/#58/#59).
 
 ## Repo at a glance
 
-- **Language:** TypeScript 6 (strict) on Node.js ≥ 24, ESM, vitest 2.0.
-- **Stack:** AWS SAM + Lambda + Middy + AWS SDK v3 + Zod + Kysely + pg + AWS Lambda Powertools.
+- **Language:** TypeScript 6 (strict) on Node.js ≥ 24, ESM, vitest 4.
+- **Stack:** AWS SAM + Lambda + Middy + AWS SDK v3 + Zod 4 + Kysely + pg + AWS Lambda Powertools + jose 6.2.4 (JWT).
+- **Lint:** ESLint 10 with flat config (`eslint.config.mjs`).
 - **Architecture:** Domain-driven, serverless. Composition root (`contexts/identity/src/composition.ts`) wires Lambda handlers to AWS clients + repositories + services.
 - **Quality status:** SonarCloud `Spark Match Way` QG (id 157178, 21 conditions). Pilot repo for the cross-repo SonarCloud rollout.
 
@@ -29,13 +30,17 @@ If any gate is red the PR is **not mergeable** to `main`.
 
 ```
 npm run typecheck            # ~5s, fails on TS errors
-npm run test:coverage        # ~5s, runs all vitest tests with 80% coverage thresholds
+npm run test:coverage        # ~5s, runs all vitest tests with 80/80/80/80 thresholds
 ```
 
 Both scripts are run automatically by **Husky** git hooks:
 
 - `pre-commit` → `npm run typecheck`
 - `pre-push`   → `npm run test:coverage` (covers new files + thresholds)
+
+### Coverage thresholds (single source of truth)
+
+Defined in [`vitest.config.mts`](vitest.config.mts#L29-L34): `lines=80, functions=80, branches=80, statements=80`. `npm run test:coverage` inherits them (no CLI overrides). Local pre-push gate; SonarCloud enforces its own per-PR gate independently.
 
 ### Windows caveat
 
@@ -53,7 +58,8 @@ The hooks are POSIX shell scripts. They fire correctly via **Git Bash**. On Wind
 4. Push branch, open PR to `dev` (not `main`).
 5. CI runs SonarCloud scan → PR-level QG must be OK.
 6. CODE OWNERS approval required (`.github/CODEOWNERS` → `@spark-match/backend-devs`).
-7. Merge with squash (ruleset enforces this). Dev→main sync runs weekly via dedicated chore PR.
+7. Merge with squash (ruleset enforces this).
+8. **Dev → main sync** is a dedicated chore PR (`chore(sync): dev -> main (PR #NN ...)`). Each sprint ends with a sync PR. The sync PR admin-bypasses the SonarCloud QG when the underlying feature PRs already passed individually (QG measures new code per PR; the sync adds no new code).
 
 ## SonarCloud gotchas
 
@@ -67,7 +73,7 @@ The hooks are POSIX shell scripts. They fire correctly via **Git Bash**. On Wind
 
 ```
 shared/src/                       # Reusable infra, http, auth, events
-  auth/                           # JWT, password hashing, require-auth, AuthContext
+  auth/                           # JWT (jose), password hashing (scrypt), require-auth, AuthContext
   events/                         # EventBridge client, schema-validator
   http/                           # ApiError, ApiResponse, error-detail
   infra/                          # ssm-reader, secrets-reader, aws-wrapper, db-wrapper
@@ -84,10 +90,24 @@ contexts/identity/src/
   tests/                          # Integration tests (migrate, user-service)
 
 layers/                           # Lambda layer build artifacts
+  node-runtime/                   # zod, middy, powertools, kysely, pg, jose
+  node-shared/                    # compiled @spark-match/shared
+migrations/                       # node-pg-migrate SQL files (V001+)
+.husky/                           # Git hooks (pre-commit, pre-push)
+docs/
+  ARCHITECTURE.md                 # Layered architecture overview
+  DECISIONS.md                    # ADR index
+  adr/                            # One file per ADR (Nygard template)
+  EVENT_CATALOG.md                # EventBridge event JSON schemas
+  FOLDER_STRUCTURE.md             # Documented layout (some dirs aspirational)
+  OBSERVABILITY.md                # Powertools observability guide
 .github/
   workflows/ci.yml                # Delegates to spark-match-01-devops recipe
+  dependabot.yml                  # Weekly npm updates (since Sprint 1 / PR #55)
   CODEOWNERS                      # Path-based reviewer routing
   pull_request_template.md
+eslint.config.mjs                 # Flat config (ESLint 10)
+vitest.config.mts                 # Coverage thresholds (80/80/80/80)
 ```
 
 ## Out of scope for agents
@@ -103,3 +123,6 @@ layers/                           # Lambda layer build artifacts
 - SonarCloud dashboard: https://sonarcloud.io/dashboard?id=spark-match-03-backend
 - SonarCloud QG: https://sonarcloud.io/quality_gates/show/157178
 - Cross-repo SonarCloud pilot docs: `BACKEND-HARDENIN-26-07.md`
+- Sibling repos in the platform: [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/) (Python AI Advisor), [`spark-match-01-devops`](../spark-match-01-devops/) (shared CI recipes), [`spark-match-02-infrastructure`](../spark-match-02-infrastructure/) (Terraform infra).
+- Sprint history:
+  - **Sprint 1** (2026-07-28, hygiene + discoverability): PR #55 Dependabot, PR #57 README badges, PR #58 vitest thresholds, PR #59 ADR migration.

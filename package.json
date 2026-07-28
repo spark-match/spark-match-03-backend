@@ -13,7 +13,7 @@
     "build:shared": "npm run build --workspace=@spark-match/shared",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.statements=80 --coverage.thresholds.branches=75",
+    "test:coverage": "vitest run --coverage",
     "test:coverage:sonar": "vitest run --coverage --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 --coverage.reporter=lcov",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
