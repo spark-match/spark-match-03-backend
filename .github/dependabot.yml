@@ -1,0 +1,55 @@
+# =============================================================================
+# Dependabot configuration for spark-match-03-backend
+# =============================================================================
+# Enables Dependabot version updates (scheduled PRs for outdated direct
+# dependencies) on top of the security updates already enabled at the repo
+# level (Settings → Security → Dependabot security updates = enabled).
+#
+# Schedule: Mondays at 06:00 UTC (before standup). Limits: 5 open PRs.
+# Groups keep related upgrades in a single PR to reduce review burden and
+# let the dev workflow handle them as one logical change.
+# =============================================================================
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      # All patch-level (and safe minor) bumps inside a major range get a
+      # single weekly PR. The `patterns` are matched against the dependency
+      # name (not the package.json path).
+      production-deps:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+      dev-tooling:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+    # Major version bumps are NOT grouped — they land as separate PRs because
+    # they typically need a dedicated branch (e.g., PR #43 for vitest 2→4,
+    # PR #45 for eslint 9→10, PR #47 for typescript 5→6, PR #51 for zod 3→4).
+    # Reviewers should assess breaking-change scope before merging.
+    #
+    # Ignore paths we don't want Dependabot to touch (Lambda layers built
+    # separately; Python handled by data-pipeline repo).
+    ignore:
+      - dependency-name: "*"
+        versions:
+          # typescript-eslint peerDeps cap typescript at <6.1.0; block TS 7+ bumps
+          # until typescript-eslint v9 ships (tracked in PR #47 follow-ups).
+          - "typescript@>=7"
