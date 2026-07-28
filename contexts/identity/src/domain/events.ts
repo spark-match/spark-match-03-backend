@@ -17,9 +17,9 @@
 
 import { z } from 'zod';
 
-const OccurredAt = z.string().datetime();
-const UserId = z.string().uuid();
-const Email = z.string().email();
+const OccurredAt = z.iso.datetime();
+const UserId = z.uuid();
+const Email = z.email();
 
 const BaseFields = {
   schemaVersion: z.literal('1.0'),
@@ -53,7 +53,7 @@ export type UserPasswordChangedEvent = z.infer<typeof UserPasswordChangedEventSc
 export const UserUpdatedEventSchema = z.object({
   ...BaseFields,
   userId: UserId,
-  changes: z.record(z.unknown()),
+  changes: z.record(z.string(), z.unknown()),
 });
 
 export type UserUpdatedEvent = z.infer<typeof UserUpdatedEventSchema>;
