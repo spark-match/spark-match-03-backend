@@ -260,7 +260,7 @@ Tres sitios, un PR.
 
 - [runtime-topology.md § 5](./runtime-topology.md#5-database-topology--aurora-postgresql-serverless-v2)
   — topologa runtime (credenciales, VPC, capa RDS CA, env vars).
-- [ARCHITECTURE.md § 6.2](./ARCHITECTURE.md) — storage strategy a nivel arquitectura.
+- [architecture.md § 6.2](./architecture.md) — storage strategy a nivel arquitectura.
 - [migrations/](../migrations/) — SQL source of truth.
 - [contexts/identity/src/infra/user-repository.ts](../contexts/identity/src/infra/user-repository.ts) — `Database` type.
 - [event-catalog.md](./event-catalog.md) — eventos que pueden disparar escrituras en `audit_log` (futuro).

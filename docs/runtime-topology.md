@@ -1,8 +1,8 @@
-# Runtime Topology — Spark Match Backend
+﻿# Runtime Topology — Spark Match Backend
 
 > Operational view of what is **actually deployed** in `spark-match-03-backend`
 > (TypeScript + AWS SAM). For high-level architecture, bounded-context rationale
-> and ADRs see [ARCHITECTURE.md](./ARCHITECTURE.md). For event payload schemas
+> and ADRs see [architecture.md](./architecture.md). For event payload schemas
 > see [event-catalog.md](./event-catalog.md).
 
 Last reviewed: 2026-07-28. Status: **Identity context live**, other contexts not yet scaffolded.
@@ -301,7 +301,7 @@ Single Aurora cluster (created by Terraform in `spark-match-02-infrastructure`),
 one DB per environment (`dev`/`staging`/`prod`). Credentials in Secrets
 Manager; ARN exposed via SSM `/spark-match/db/secret-arn`.
 
-**Schema-per-bounded-context** strategy (see [ARCHITECTURE.md § 6.2](./ARCHITECTURE.md)):
+**Schema-per-bounded-context** strategy (see [architecture.md § 6.2](./architecture.md)):
 
 ```
 spark_match (database)

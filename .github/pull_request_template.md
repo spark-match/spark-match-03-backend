@@ -1,4 +1,4 @@
-<!-- markdownlint-disable MD041 -->
+﻿<!-- markdownlint-disable MD041 -->
 ## Descripción
 
 <!-- ¿Qué hace este PR? Sé breve pero claro. -->
@@ -32,8 +32,8 @@
 - [ ] He actualizado `docs/` si el cambio es arquitectónico
 - [ ] He actualizado `docs/CHANGELOG.md` si aplica
 - [ ] Si añadí una Lambda nueva, está en el `template.yaml` raíz como nested stack
-- [ ] Si toqué schemas de eventos, actualicé `docs/EVENT_CATALOG.md`
-- [ ] Si añadí un secreto nuevo, lo documenté en `docs/ARCHITECTURE.md` (sección 7)
+- [ ] Si toqué schemas de eventos, actualicé `docs/event-catalog.md`
+- [ ] Si añadí un secreto nuevo, lo documenté en `docs/architecture.md` (sección 7)
 
 ## Impacto en costos
 

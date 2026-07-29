@@ -1,4 +1,4 @@
-# Spark Match Backend
+﻿# Spark Match Backend
 
 > **Serverless DDD+EDA monolith** built on AWS Lambda + TypeScript (Node.js).
 > The Python AI Advisor lives in the sibling repo [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/) (Python + LangChain + AWS Bedrock).
@@ -14,11 +14,11 @@
 
 ## 📋 Quick links
 
-- **Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **ADRs (architectural decisions)**: [docs/DECISIONS.md](docs/DECISIONS.md)
-- **Event catalog**: [docs/EVENT_CATALOG.md](docs/EVENT_CATALOG.md)
-- **Folder structure**: [docs/FOLDER_STRUCTURE.md](docs/FOLDER_STRUCTURE.md)
-- **Observability guide**: [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)
+- **Architecture**: [docs/architecture.md](docs/architecture.md)
+- **ADRs (architectural decisions)**: [docs/decisions.md](docs/decisions.md)
+- **Event catalog**: [docs/event-catalog.md](docs/event-catalog.md)
+- **Folder structure**: [docs/folder-structure.md](docs/folder-structure.md)
+- **Observability guide**: [docs/observability.md](docs/observability.md)
 - **High-level decisions**: [../BACKEND.md](../BACKEND.md) (root level)
 
 ## 🚀 Quick start
@@ -111,7 +111,7 @@ sam deploy --config-env prod
                      └────────────────┘
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
+See [docs/architecture.md](docs/architecture.md) for the full design.
 
 ## 📂 Folder structure
 
@@ -144,12 +144,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 ├── migrations/               # node-pg-migrate SQL files (V001+)
 │
 ├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── DECISIONS.md          # ADR index
+│   ├── architecture.md
+│   ├── decisions.md          # ADR index
 │   ├── adr/                  # One file per ADR (Nygard template)
-│   ├── EVENT_CATALOG.md
-│   ├── FOLDER_STRUCTURE.md
-│   └── OBSERVABILITY.md
+│   ├── event-catalog.md
+│   ├── folder-structure.md
+│   └── observability.md
 │
 └── .github/
     ├── CODEOWNERS            # Per-context ownership

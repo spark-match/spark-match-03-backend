@@ -1,4 +1,4 @@
-# Runbook — Spark Match Backend (Identity context)
+﻿# Runbook — Spark Match Backend (Identity context)
 
 > Procedimientos operacionales para deploy, rollback, migraciones,
 > rotacin de secretos, smoke tests y disaster recovery.
@@ -339,7 +339,7 @@ Filtros tiles:
 
 Namespace `AWS/Lambda` para invocaciones. Namespace
 `spark-match-backend` para custom metrics (Powertools). Ver
-[OBSERVABILITY.md](./OBSERVABILITY.md).
+[observability.md](./observability.md).
 
 ### 7.4 Aurora performance
 
@@ -405,7 +405,7 @@ aws pi describe-query-statistics \
 - [runtime-topology.md](./runtime-topology.md) — env vars, ARNs, layer names.
 - [auth-rbac.md](./auth-rbac.md) — JWT lifecycle, secret rotation.
 - [error-catalog.md](./error-catalog.md) — diagnstico por error code.
-- [OBSERVABILITY.md](./OBSERVABILITY.md) — logging/tracing/metrics setup.
+- [observability.md](./observability.md) — logging/tracing/metrics setup.
 - `samconfig.toml` — deploy profiles.
 - `template.yaml` + `contexts/identity/template.yaml` — IaC.
 - `migrations/V00N__*.sql` — SQL source of truth.
