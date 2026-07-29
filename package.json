@@ -27,11 +27,11 @@
     "layer:build:node-shared": "bash layers/node-shared/build.sh",
     "layer:build:node-runtime": "bash layers/node-runtime/build.sh",
     "layer:build:all": "npm run layer:build:node-shared && npm run layer:build:node-runtime",
-    "migrate:create": "node-pg-migrate create --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public -- --helper false",
-    "migrate:up": "node-pg-migrate up --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
-    "migrate:down": "node-pg-migrate down --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
-    "migrate:redo": "node-pg-migrate redo --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
-    "migrate:status": "node-pg-migrate status --use-glob --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
+    "migrate:create": "node-pg-migrate create --use-glob --migrations-dir 'migrations/*.sql' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public -- --helper false",
+    "migrate:up": "node-pg-migrate up --use-glob --migrations-dir 'migrations/*.sql' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
+    "migrate:down": "node-pg-migrate down --use-glob --migrations-dir 'migrations/*.sql' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
+    "migrate:redo": "node-pg-migrate redo --use-glob --migrations-dir 'migrations/*.sql' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
+    "migrate:status": "node-pg-migrate status --use-glob --migrations-dir 'migrations/*.sql' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
     "prepare": "husky"
   },
   "devDependencies": {
