@@ -25,7 +25,7 @@ Last reviewed: 2026-07-28.
 
 **Postcondiciones**:
 - Nueva fila en `identity.users` con `id = UUID v4`, `role = 'admin'`
-  (default V003), `active = true`.
+  (default 003), `active = true`.
 - `identity.users.password_hash` = `scrypt$N$r$p$salt$hash`.
 
 **Efectos colaterales**:
@@ -318,8 +318,8 @@ informacin sobre si la cuenta existe (mensaje neutro en 401).
 ```json
 {
   "direction": "up",
-  "applied": ["V003__add_role_and_active_to_users.sql"],
-  "log": ["== V003: migrating =======", "..."]
+  "applied": ["003_add_role_and_active_to_users.sql"],
+  "log": ["== 003: migrating =======", "..."]
 }
 ```
 

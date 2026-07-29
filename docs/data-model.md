@@ -98,22 +98,22 @@ spark_match (database)
 
 ---
 
-## 3. `identity.users` (V002 + V003)
+## 3. `identity.users` (002 + 003)
 
-**Migraciones**: [V002__create_users_table.sql](../migrations/V002__create_users_table.sql),
-[V003__add_role_and_active_to_users.sql](../migrations/V003__add_role_and_active_to_users.sql).
+**Migraciones**: [002_create_users_table.sql](../migrations/002_create_users_table.sql),
+[003_add_role_and_active_to_users.sql](../migrations/003_add_role_and_active_to_users.sql).
 
 | Columna | Tipo | Nullable | Default | Origen | Notas |
 |---|---|---|---|---|---|
-| `id` | `UUID` | no | `gen_random_uuid()` | V002 | PK; `pgcrypto` extension habilitada por V002 |
-| `email` | `VARCHAR(255)` | no | — | V002 | `UNIQUE`; lowercase enforced en la app |
-| `full_name` | `VARCHAR(255)` | no | — | V002 | |
-| `password_hash` | `VARCHAR(255)` | no | — | V002 | Formato `scrypt$N$r$p$salt_b64u$hash_b64u` |
-| `age` | `SMALLINT` | s | `NULL` | V002 | Rango app-enforced: 13..120 |
-| `created_at` | `TIMESTAMPTZ` | no | `current_timestamp` | V002 | |
-| `updated_at` | `TIMESTAMPTZ` | no | `current_timestamp` | V002 + trigger | Auto-touched por `users_touch_updated_at` |
-| `role` | `TEXT` | no | `'admin'` | V003 | `CHECK (role IN ('admin'))` |
-| `active` | `BOOLEAN` | no | `TRUE` | V003 | `FALSE` deshabilita login sin borrar la fila |
+| `id` | `UUID` | no | `gen_random_uuid()` | 002 | PK; `pgcrypto` extension habilitada por 002 |
+| `email` | `VARCHAR(255)` | no | — | 002 | `UNIQUE`; lowercase enforced en la app |
+| `full_name` | `VARCHAR(255)` | no | — | 002 | |
+| `password_hash` | `VARCHAR(255)` | no | — | 002 | Formato `scrypt$N$r$p$salt_b64u$hash_b64u` |
+| `age` | `SMALLINT` | s | `NULL` | 002 | Rango app-enforced: 13..120 |
+| `created_at` | `TIMESTAMPTZ` | no | `current_timestamp` | 002 | |
+| `updated_at` | `TIMESTAMPTZ` | no | `current_timestamp` | 002 + trigger | Auto-touched por `users_touch_updated_at` |
+| `role` | `TEXT` | no | `'admin'` | 003 | `CHECK (role IN ('admin'))` |
+| `active` | `BOOLEAN` | no | `TRUE` | 003 | `FALSE` deshabilita login sin borrar la fila |
 
 ### 3.1 ndices
 
@@ -121,7 +121,7 @@ spark_match (database)
 |---|---|---|---|
 | `users_pkey` | `id` | btree (PK implcito) | |
 | `users_email_key` | `email` | btree (UNIQUE implcito) | `findByEmail`, `existsByEmail` |
-| `identity_users_active_email_idx` | `(active, email)` | btree (V003) | Soporta `listUsers` con filtro `active` + sort por email |
+| `identity_users_active_email_idx` | `(active, email)` | btree (003) | Soporta `listUsers` con filtro `active` + sort por email |
 
 ### 3.2 Triggers
 
@@ -136,7 +136,7 @@ La funcin trigger vive en el schema `identity` y se aplica solo a la tabla
 
 | Extension | Habilitada por | Uso |
 |---|---|---|
-| `pgcrypto` | V002 | `gen_random_uuid()` para `id` |
+| `pgcrypto` | 002 | `gen_random_uuid()` para `id` |
 
 `pgcrypto` viene pre-instalado en Aurora PostgreSQL pero la migracin lo
 declara explcitamente con `CREATE EXTENSION IF NOT EXISTS` para que el
@@ -144,9 +144,9 @@ schema sea portable a un Postgres fresco.
 
 ---
 
-## 4. `identity.audit_log` (V004)
+## 4. `identity.audit_log` (004)
 
-**Migracin**: [V004__create_audit_log.sql](../migrations/V004__create_audit_log.sql).
+**Migracin**: [004_create_audit_log.sql](../migrations/004_create_audit_log.sql).
 
 | Columna | Tipo | Nullable | Default | Notas |
 |---|---|---|---|---|
@@ -181,17 +181,17 @@ schema sea portable a un Postgres fresco.
 
 ---
 
-## 5. `public.spark_match_migrations` (V001)
+## 5. `public.spark_match_migrations` (001)
 
-**Migracin**: [V001__create_identity_schema_and_tracking.sql](../migrations/V001__create_identity_schema_and_tracking.sql).
+**Migracin**: [001_create_identity_schema_and_tracking.sql](../migrations/001_create_identity_schema_and_tracking.sql).
 
-Tabla de tracking del migrator (`node-pg-migrate`). Pre-creada por V001
+Tabla de tracking del migrator (`node-pg-migrate`). Pre-creada por 001
 para que la primera aplicacin tenga la tabla ya presente (los dems
 migrators la esperan).
 
 | Columna | Tipo | Nullable | Default | Notas |
 |---|---|---|---|---|
-| `name` | `TEXT` | no | — | PK; nombre del archivo de migracin (ej. `V002__create_users_table.sql`) |
+| `name` | `TEXT` | no | — | PK; nombre del archivo de migracin (ej. `002_create_users_table.sql`) |
 | `run_on` | `TIMESTAMPTZ` | no | `current_timestamp` | Cuando se aplic |
 
 No tiene ndices adicionales (PK basta para lookups por nombre).

@@ -4,11 +4,11 @@
 
 ### Contexto
 
-El backend tiene 4 migraciones SQL (`migrations/V001..V004__*.sql`)
+El backend tiene 4 migraciones SQL (`migrations/001..004_*.sql`)
 aplicadas por `node-pg-migrate` tanto en local (npm script) como en
 produccin (Lambda `migrate.handler`). No existe validacin
-automtica de la *secuencia* de migraciones: si V003 declara una
-columna con un CHECK constraint y V004 intenta un INSERT que la
+automtica de la *secuencia* de migraciones: si 003 declara una
+columna con un CHECK constraint y 004 intenta un INSERT que la
 viola, el bug se descubre solo cuando el migrator en produccin
 falla, momento en el que la siguiente smoke test rompe y la pipeline
 se estanca.
@@ -44,7 +44,7 @@ repo**, con las siguientes overrides:
 | `postgres-password` | `postgres` | `postgres` (default) |
 | `postgres-db` | `orion_test` | `spark_match_test` |
 | `migrations-dir` | `migrations` | `migrations` (default) |
-| `migrations-table` | `orion_migrations` | **`spark_match_migrations`** (matches `node-pg-migrate` scripts en `package.json:30-34` y V001) |
+| `migrations-table` | `orion_migrations` | **`spark_match_migrations`** (matches `node-pg-migrate` scripts en `package.json:30-34` y 001) |
 | `migrations-schema` | `public` | `public` (default) |
 | `node-version` | `24` | `24` (default) |
 | `working-directory` | `.` | `.` (default) |
@@ -79,18 +79,18 @@ SQL son idempotentes y el recipe usa el mismo `node-pg-migrate` CLI.
 ### Known issues en el recipe (de momento aceptados)
 
 1. **`ORDER BY id` en el summary query** (`migrations-dry-run.yml:282-295`)
-   apunta a una columna que V001 no tiene. El recipe lo wrapea en
+   apunta a una columna que 001 no tiene. El recipe lo wrapea en
    `|| echo "::warning::..."` entonces no falla, pero el summary
    mostrar warning en lugar de las migraciones aplicadas. **Fix**:
    crear PR a devops que cambie `ORDER BY id` por `ORDER BY run_on, name`.
    Out of scope de este PR (mantener el PR de backend fnico).
 
-2. **V004 audit_log y permisos de aplicacin** (preexistente del
-   PR #70): V004 no tiene `GRANT` statements. Asume que la app y el
+2. **004 audit_log y permisos de aplicacin** (preexistente del
+   PR #70): 004 no tiene `GRANT` statements. Asume que la app y el
    migrator usan el mismo rol (master credentials). Si en el futuro
    se introduce un rol segregado, esta migracin ser insuficiente.
    **Backlog**: aadir `GRANT USAGE ON SCHEMA identity` +
-   `GRANT INSERT ON identity.audit_log` en una V005 cuando se
+   `GRANT INSERT ON identity.audit_log` en una 005 cuando se
    segregen roles.
 
 3. **Round-trip up/down/up no se ejecuta**: las 4 migraciones
@@ -122,9 +122,9 @@ SQL son idempotentes y el recipe usa el mismo `node-pg-migrate` CLI.
 
 ### Referencias
 
-- `migrations/V001__create_identity_schema_and_tracking.sql` — schema,
+- `migrations/001_create_identity_schema_and_tracking.sql` — schema,
   tracking table `spark_match_migrations`
-- `migrations/V002..V004__*.sql` — users, RBAC, audit_log
+- `migrations/002..004_*.sql` — users, RBAC, audit_log
 - `package.json:30-34` — scripts `migrate:up`/`migrate:down`/`migrate:status`
 - `contexts/identity/src/handlers/migrate.ts` — Lambda migrator
 - `template.yaml` (identity nest) — `MIGRATE_DATABASE_URL` from SSM
