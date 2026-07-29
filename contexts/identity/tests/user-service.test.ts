@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { hashPassword } from '@spark-match/shared/auth';
 import { createUserService } from '../src/service/user-service.js';
 import type { User, UserRole } from '../src/domain/user.js';
 
@@ -128,7 +129,6 @@ describe('userService.register', () => {
 
 describe('userService.authenticate', () => {
   it('returns user when credentials match (and user is active)', async () => {
-    const { hashPassword } = await import('@spark-match/shared/auth');
     const passwordHash = await hashPassword('correctPass123');
     const deps = makeDeps();
     deps.userRepository.findByEmail.mockResolvedValue(
@@ -173,7 +173,6 @@ describe('userService.authenticate', () => {
   });
 
   it('throws 401 with generic message on wrong password', async () => {
-    const { hashPassword } = await import('@spark-match/shared/auth');
     const passwordHash = await hashPassword('correctPass123');
     const deps = makeDeps();
     deps.userRepository.findByEmail.mockResolvedValue(

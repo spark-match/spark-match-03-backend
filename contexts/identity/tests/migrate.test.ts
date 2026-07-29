@@ -8,6 +8,7 @@
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ApiError } from '@spark-match/shared/http';
 
 const { mockRunner } = vi.hoisted(() => ({
   mockRunner: vi.fn(),
@@ -115,7 +116,6 @@ describe('migrate handler - error mapping', () => {
   });
 
   it('propagates ApiError thrown by runner (forbidden example)', async () => {
-    const { ApiError } = await import('@spark-match/shared/http');
     const original = ApiError.forbidden('migration is locked');
     mockRunner.mockRejectedValueOnce(original);
     // The handler does `err instanceof ApiError`; the test asserts that the
