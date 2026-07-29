@@ -22,6 +22,7 @@ import {
   type UserRepository,
   type Database,
 } from './infra/user-repository.js';
+import { createAuditRepository, type AuditRepository } from './infra/audit-repository.js';
 import { createUserService, type UserService } from './service/user-service.js';
 import { createJwtSigner, type JwtSigner } from './infra/jwt-signer.js';
 
@@ -36,6 +37,7 @@ export interface IdentityContext {
   eventPublisher: EventPublisher;
   db: Kysely<Database>;
   userRepository: UserRepository;
+  auditRepository: AuditRepository;
   userService: UserService;
   jwtSigner: JwtSigner;
   defaultTokenExpiresSeconds: number;
@@ -66,7 +68,13 @@ export async function buildContext(): Promise<IdentityContext> {
 
     const db = await getDbConnection();
     const userRepository = createUserRepository(db);
-    const userService = createUserService({ userRepository, eventPublisher });
+    const auditRepository = createAuditRepository(db);
+    const userService = createUserService({
+      db,
+      userRepository,
+      auditRepository,
+      eventPublisher,
+    });
 
     const built: IdentityContext = {
       logger,
@@ -75,6 +83,7 @@ export async function buildContext(): Promise<IdentityContext> {
       eventPublisher,
       db,
       userRepository,
+      auditRepository,
       userService,
       jwtSigner,
       defaultTokenExpiresSeconds: DEFAULT_JWT_EXPIRES_SECONDS,

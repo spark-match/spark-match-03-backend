@@ -11,23 +11,12 @@
 // type-level link to the `Database['users']` row type.
 // =============================================================================
 
-import type { Kysely } from 'kysely';
+import type { Kysely, Transaction } from 'kysely';
 import { withDbErrorMapping } from '@spark-match/shared/infra';
 import type { User, CreateUserInput, UserRole, UpdateUserInput } from '../domain/user.js';
+import type { Database } from './database.js';
 
-export interface Database {
-  users: {
-    id: string;
-    email: string;
-    full_name: string;
-    password_hash: string;
-    age: number | null;
-    role: UserRole;
-    active: boolean;
-    created_at: Date;
-    updated_at: Date;
-  };
-}
+export type { Database } from './database.js';
 
 const IDENTITY = 'identity';
 const DEFAULT_ROLE: UserRole = 'admin';
@@ -44,6 +33,7 @@ export interface ListUsersResult {
 }
 
 export interface UserRepository {
+  withDb(db: Kysely<Database> | Transaction<Database>): UserRepository;
   findByEmail(email: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
   create(input: CreateUserInput): Promise<User>;
@@ -56,8 +46,11 @@ export interface UserRepository {
   count(): Promise<number>;
 }
 
-export function createUserRepository(db: Kysely<Database>): UserRepository {
+export function createUserRepository(db: Kysely<Database> | Transaction<Database>): UserRepository {
   return {
+    withDb(newDb: Kysely<Database> | Transaction<Database>): UserRepository {
+      return createUserRepository(newDb);
+    },
     async findByEmail(email: string): Promise<User | null> {
       return withDbErrorMapping('users.findByEmail', async () => {
         const row = await db

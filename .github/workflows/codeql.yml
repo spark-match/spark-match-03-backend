@@ -56,12 +56,3 @@ jobs:
       queries-pack: 'security-extended'
       fail-on-alerts: true
       fail-on-severity: 'warning'
-      paths-ignore: |
-        docs/**
-        **/*.md
-        coverage/**
-        node_modules/**
-        shared/dist/**
-        contexts/**/dist/**
-        scripts/**
-        .github/CODEOWNERS

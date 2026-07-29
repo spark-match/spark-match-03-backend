@@ -9,9 +9,16 @@ export const handler = buildHandler<LoginInput, LoginOutput>({
   inputSchema: LoginInputSchema,
   logger: createLogger('identity-login'),
   tracer: new Tracer({ serviceName: 'identity-login' }),
-  handler: async (input) => {
+  handler: async (input, event) => {
     const ctx = await buildContext();
-    const user = await ctx.userService.authenticate(input.email, input.password);
+    const ip = event.requestContext.http.sourceIp;
+    const userAgent = event.headers['user-agent'] ?? 'unknown';
+    const user = await ctx.userService.authenticate({
+      email: input.email,
+      password: input.password,
+      ip,
+      userAgent,
+    });
     const accessToken = await ctx.signForUser(user);
     ctx.logger.info('User logged in', { userId: user.id });
 
