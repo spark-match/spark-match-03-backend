@@ -20,13 +20,16 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@f84ec7d548307efafe33230528756de3c5841a17 # v2
 
       - name: Install dependencies
         run: npm ci
@@ -38,13 +41,11 @@ jobs:
         run: npm run layer:build:all
 
       - name: SAM Build
-        uses: aws/aws-actions-github-actions-for-sam@v1
-        with:
-          use-container: false
+        run: sam build --use-container
 
       - name: SAM Deploy
-        uses: aws/aws-actions-github-actions-for-sam@v1
-        with:
-          use-container: false
-          command: deploy
-          args: --config-env ${{ inputs.environment }} --no-fail-on-empty-changeset --no-disable-rollback
+        run: >
+          sam deploy
+          --config-env ${{ inputs.environment }}
+          --no-fail-on-empty-changeset
+          --no-disable-rollback
