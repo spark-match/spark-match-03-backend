@@ -31,8 +31,8 @@ Last reviewed: 2026-07-28.
 **Efectos colaterales**:
 - **EventBridge**: publica `UserRegistered` (`detail-type: UserRegistered`,
   source `spark-match.identity`). Ver [event-catalog.md § 2.1](./event-catalog.md).
-- **`identity.audit_log`**: **no se escribe** (gap conocido, ver
-  [data-model.md § 4.2](./data-model.md)).
+- **`identity.audit_log`**: inserta `user.registered` (actor=null,
+  subject=newUser.id, metadata={email, role}). Ver [data-model.md § 4.2](./data-model.md).
 
 **Status codes**:
 
@@ -382,13 +382,17 @@ false`. Si true, el contexto se adjunta a
 | UC-2 | Login | anonymous | `UserLoggedIn` | `users` (read) |
 | UC-3 | Get me | self | — | `users` (read) |
 | UC-4 | Update profile | self | `UserUpdated` | `users` (update) |
-| UC-5 | Update user (admin) | admin | `UserUpdated`, `UserRoleChanged` (si role cambi) | `users` (update) |
-| UC-6 | Change password | self | `UserPasswordChanged` | `users` (update password_hash) |
-| UC-7 | List users | admin | — | `users` (read paginated) |
-| UC-8 | Activate user | admin | `UserActivated` (si transicin efectiva) | `users` (update active) |
-| UC-9 | Deactivate user | admin | `UserDeactivated` (si transicin efectiva) | `users` (update active) |
+| UC-5 | Update user (admin) | admin | `UserUpdated`, `UserRoleChanged` (si role cambi) | `users` (update), `audit_log` (`user.profile_updated`, `user.role_changed` si aplica) |
+| UC-6 | Change password | self | `UserPasswordChanged` | `users` (update password_hash), `audit_log` (`user.password_changed`) |
+| UC-7 | List users | admin | — | `users` (read paginated), `audit_log` (`user.list_viewed`) |
+| UC-8 | Activate user | admin | `UserActivated` (si transicin efectiva) | `users` (update active), `audit_log` (`user.activated` si transicin) |
+| UC-9 | Deactivate user | admin | `UserDeactivated` (si transicin efectiva) | `users` (update active), `audit_log` (`user.deactivated` si transicin) |
 | UC-10 | Migrate (ops) | IAM | — | `public.spark_match_migrations` + todas |
 | UC-11 | Authorize | API GW | — | Secrets Manager (read JWT secret) |
 
-**Gap conocido**: `identity.audit_log` no se escribe en ningn caso.
-Ver [data-model.md § 4.2](./data-model.md).
+**Audit log writes**: todas las mutaciones + `getUser` + `listUsers` escriben
+un row en `identity.audit_log` dentro de la misma transaccin que la
+operacin. Las transiciones idempotentes (deactivate/activate cuando el
+estado ya es el deseado) **no** escriben audit row. Los intentos de
+login fallidos **no** escriben audit row (evita user-enumeration). Ver
+[ADR-015](./adr/015-audit-log-writes.md) y [data-model.md § 4.2](./data-model.md).

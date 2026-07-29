@@ -26,7 +26,7 @@ spark_match (database)
     spark_match_migrations
   identity                ← Identity context (LIVE)
     users
-    audit_log             ← creada, NO escrita por la app an
+    audit_log             ← escrita por user-service (ADR-015)
   (assessment)            ← planned, no migrada
   (career)                ← planned, no migrada
   (matching)              ← planned, no migrada
@@ -166,13 +166,18 @@ schema sea portable a un Postgres fresco.
 | `identity_audit_log_subject_idx` | `(subject_user_id, occurred_at DESC) WHERE subject_user_id IS NOT NULL` | Partial index; per-user history |
 | `identity_audit_log_action_idx` | `(action, occurred_at DESC)` | Action-type reports |
 
-### 4.2 ⚠️ Schema sin escritura (gap conocido)
+### 4.2 Escritura desde el service layer (ADR-015)
 
-> **La tabla existe pero el servicio NO escribe en ella.** El comentario
-> en V004 deca "Inserted by the service layer (Phase 3+) from the same
-> transaction as the change", pero Phase 3 nunca cerr esa parte. El repo
-> `user-service.ts` emite eventos a EventBridge pero no inserta en
-> `audit_log`. Ver [BACKLOG § 8](#8-backlog-conocido).
+> El `user-service.ts` escribe en `audit_log` dentro de la **misma
+> transaccin** que la mutacin de `users` (cuando aplica) o antes del
+> read (para `getUser` / `listUsers`). Ver [ADR-015](./adr/015-audit-log-writes.md).
+>
+> **9 acciones** cubiertas: `user.registered`, `user.login`,
+> `user.profile_viewed`, `user.profile_updated`, `user.password_changed`,
+> `user.deactivated`, `user.activated`, `user.role_changed`,
+> `user.list_viewed`. Los `deactivate/activate` idempotentes (estado ya
+> en el valor deseado) **no** escriben audit row. Los intentos de
+> login fallidos **no** escriben audit row (evita user-enumeration).
 
 ---
 
@@ -247,11 +252,12 @@ Tres sitios, un PR.
 
 | Item | Severidad | Descripcin |
 |---|---|---|
-| `audit_log` no se escribe | **P1** | Implementar `audit-log-repository.ts` y wire en `user-service.ts`. Cada mutacin de `users` debe acompaarse de un INSERT en `audit_log` en la misma transaccin. |
 | `audit_log` UPDATE/DELETE permission | P2 | `REVOKE UPDATE, DELETE ON identity.audit_log FROM <app_role>` (compliance) |
+| `audit_log` retention policy | P2 | Partition por mes + archive a S3 (crecimiento indefinido) |
 | `users.created_at` index | P3 | `listUsers` orderBy por `created_at` es sequential scan hoy. Aceptable para MVP. |
 | `password_history` / `password_expiry` | P3 | Si se aaden, requiere columna + CHECK constraint migration |
 | `updated_by` column | P3 | Hoy `updated_at` se toca pero no sabemos quin. Complementa `audit_log`. |
+| GET /v1/audit (admin) | P3 | Hoy el audit_log es write-only; no hay endpoint de lectura. |
 | Future contexts (Assessment, Career, Matching) | P2 | Cuando aterricen, replicar el patrn schema-per-context + `Database` type por repositorio |
 
 ---
