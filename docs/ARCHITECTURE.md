@@ -378,3 +378,10 @@ Todos los workflows de `03-backend` son **callers** de los workflows reutilizabl
 | **Shared Kernel** | Código compartido entre contextos (mínimo, cuidadosamente versionado) |
 | **Cold Start** | Latencia de la primera invocación de una Lambda (init del runtime) |
 | **pgvector** | Extensión de Postgres para almacenar y buscar vectores (embeddings) |
+
+## 12. Documentos relacionados
+
+- [runtime-topology.md](./runtime-topology.md) — Vista operacional: rutas API Gateway, inventario de Lambdas, topología de DB (schemas por contexto), EventBridge producers/consumers.
+- [event-catalog.md](./event-catalog.md) — Single source of truth para payloads de eventos de dominio.
+- [FOLDER_STRUCTURE.md](./FOLDER_STRUCTURE.md) — Estructura de carpetas, capas, convenciones de naming.
+- [OBSERVABILITY.md](./OBSERVABILITY.md) — Logging estructurado, tracing X-Ray, métricas.
