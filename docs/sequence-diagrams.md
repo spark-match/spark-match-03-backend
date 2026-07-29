@@ -351,17 +351,17 @@ actual.
   │             │                ├───────────────────▶│                  │
   │             │                │                    │ getAppliedMigrations()         │
   │             │                │                    ├─────────────────▶│
-  │             │                │                    │ ⇽ ['V001','V002']              │
-  │             │                │                    │ applyPending()  │                  │
-  │             │                │                    │ (for each missing V00N)         │
-  │             │                │                    │ BEGIN                           │
-  │             │                │                    ├─────────────────▶│
-  │             │                │                    │ INSERT INTO public.spark_match_migrations (name) VALUES ('V003...')
-  │             │                │                    │ ... execute V003 SQL body ...
-  │             │                │                    │ COMMIT                          │
-  │             │                │                    ├─────────────────▶│
-  │             │                │                    │ ⇽ ok            │                  │
-  │             │                │  ⇽ {direction:'up',applied:['V003'],log:[...]}
+   │             │                │                    │ ⇽ ['001','002']               │
+   │             │                │                    │ applyPending()  │                  │
+   │             │                │                    │ (for each missing 00N)          │
+   │             │                │                    │ BEGIN                           │
+   │             │                │                    ├─────────────────▶│
+   │             │                │                    │ INSERT INTO public.spark_match_migrations (name) VALUES ('003...')
+   │             │                │                    │ ... execute 003 SQL body ...
+   │             │                │                    │ COMMIT                          │
+   │             │                │                    ├─────────────────▶│
+   │             │                │                    │ ⇽ ok            │                  │
+   │             │                │  ⇽ {direction:'up',applied:['003'],log:[...]}
   │             │  ⇽ JSON        │                    │                  │
   │ ⇽ JSON      │                │                    │                  │
 ```
