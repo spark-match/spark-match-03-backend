@@ -271,9 +271,10 @@ leen el valor en cada invocacin (con cache de 5 min).
 
 ### 5.3 Audit log
 
-`identity.audit_log` no se escribe hoy (gap), as que no requiere
-rotacin. Si se implementa en el futuro, NO rotar — la tabla es
-append-only.
+`identity.audit_log` se escribe desde el service layer (PR #70,
+ADR-015): 9 acciones, dentro de la misma transaccin que la mutacin de
+`users`. **No rotar** — la tabla es append-only. Retention policy y
+archive a S3 estn en el backlog (P2).
 
 ---
 
@@ -375,7 +376,8 @@ aws pi describe-query-statistics \
 | IAM `SecretsManagerReadWrite` `Resource: '*'` (5 occ.) | P2 | Sprint 5 — scope a ARNs especficos |
 | CORS `AllowOrigins: '*'` en prod | P2 | Sprint 5 — custom domain + WAF |
 | JWT TTL drift (jwt-helpers default 3600 vs composition 86400) | P3 | Alinear defaults |
-| `audit_log` no se escribe | P1 | data-model § 4.2 — implementar `audit-log-repository` |
+| `audit_log` UPDATE/DELETE permission | P2 | compliance: `REVOKE UPDATE, DELETE ON identity.audit_log FROM <app_role>` |
+| `audit_log` retention policy | P2 | Partition por mes + archive a S3 (crecimiento indefinido) |
 
 ---
 
