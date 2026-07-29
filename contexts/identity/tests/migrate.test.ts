@@ -8,7 +8,7 @@
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ApiError } from '@spark-match/shared/http';
+import { ApiError } from '../../../shared/src/http/index.js';
 
 const { mockRunner } = vi.hoisted(() => ({
   mockRunner: vi.fn(),

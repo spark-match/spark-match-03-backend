@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { hashPassword } from '@spark-match/shared/auth';
+import { hashPassword } from '../../../shared/src/auth/index.js';
 import { createUserService } from '../src/service/user-service.js';
 import type { User, UserRole } from '../src/domain/user.js';
 
