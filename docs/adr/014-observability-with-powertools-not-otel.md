@@ -1,8 +1,8 @@
-# ADR-014: Observabilidad con Powertools (NO OpenTelemetry)
+﻿# ADR-014: Observabilidad con Powertools (NO OpenTelemetry)
 
 
 **Estado**: Aceptado · **Fecha**: 2026-07-06
-**Relacionado**: `D:\UNI\Spark\BACKEND.md` (Decisión 8), `docs/OBSERVABILITY.md`
+**Relacionado**: `D:\UNI\Spark\BACKEND.md` (Decisión 8), `docs/observability.md`
 
 ### Contexto
 
@@ -48,7 +48,7 @@ Decisión entre la librería oficial de AWS (Lambda Powertools) vs el estándar 
 
 **Mitigaciones**:
 - Powertools y OTel exponen APIs similares, la migración es factible
-- Documentar la decisión en `docs/OBSERVABILITY.md` para que sea fácil revertir
+- Documentar la decisión en `docs/observability.md` para que sea fácil revertir
 
 ### Cuándo reconsiderar
 
