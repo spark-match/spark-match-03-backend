@@ -1,5 +1,5 @@
 -- =============================================================================
--- V002__create_users_table.sql
+-- 002_create_users_table.sql
 -- =============================================================================
 -- Base `identity.users` table. Mirrors the `Database` type in
 --   contexts/identity/src/infra/user-repository.ts
@@ -14,7 +14,7 @@
 --     input before insert/lookup) to keep collation deterministic.
 --   - password_hash stores the scrypt encoding produced by
 --     shared/src/auth/hash-password.ts: `scrypt$N$r$p$<salt>b64u$<hash>b64u`.
---   - V003 will add `role` and `active` columns. V004 will add audit_log.
+--   - 003 will add `role` and `active` columns. 004 will add audit_log.
 -- =============================================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
