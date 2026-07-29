@@ -23,6 +23,8 @@
 | [ADR-012](adr/012-hybrid-backend-lambda-plus-python-server.md) | Backend híbrido — Lambda (Node/Py) + servidor Python dedicado | **Deprecado parcialmente** (2026-07-28: Lambda Python → Lambda TS; AI Advisor sigue en repo separado) | 2026-07-06 / 2026-07-28 |
 | [ADR-013](adr/013-middy-zod-powertools-stack.md) | Stack Middy + Zod + Lambda Powertools (NO NestJS/Spring/Quarkus) | Aceptado | 2026-07-06 |
 | [ADR-014](adr/014-observability-with-powertools-not-otel.md) | Observabilidad con Powertools (NO OpenTelemetry) | Aceptado | 2026-07-06 |
+| [ADR-015](adr/015-audit-log-writes.md) | Audit-log writes (sync, in-transaction) para todas las mutaciones + reads de `users` | Aceptado | 2026-07-29 |
+| [ADR-016](adr/016-migrations-dry-run-ci.md) | `migrations-dry-run` CI job (sequence validation via devops reusable workflow) | Aceptado | 2026-07-29 |
 
 ## How to add a new ADR
 

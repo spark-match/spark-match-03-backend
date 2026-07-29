@@ -232,7 +232,7 @@ curl -sS "$API_URL/v1/users" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-Como `register` crea un user con `role = 'admin'` (default V003), este
+Como `register` crea un user con `role = 'admin'` (default 003), este
 smoke test puede listar users. En prod, hacer bootstrap con un usuario
 admin dedicado (no documentado an, ver § 8 gaps).
 
@@ -369,7 +369,7 @@ aws pi describe-query-statistics \
 | `workflow_run` smoke test post-deploy | P2 | Sprint 2 #4 |
 | Self-healing stack reconcile | P2 | Sprint 2 #2 |
 | Auto-migrate post-deploy | P3 | Sprint 2 #3 (post-condition of #1) |
-| Bootstrap script for first admin user | P2 | No documentado; hoy `register` crea users con `role='admin'` (default V003) |
+| Bootstrap script for first admin user | P2 | No documentado; hoy `register` crea users con `role='admin'` (default 003) |
 | Bootstrap seed migration | P3 | Si se quiere sembrar admin sin API call |
 | Custom Lambda Permission `SourceArn` check | P3 | Sprint 2 #5 |
 | Aurora CA bundle in `node-runtime` layer | P2 | `build.sh` debe copiar `rds-ca-bundle.pem` al path `/var/task/certificates/rds.pem` esperado por `NODE_EXTRA_CA_CERTS` |
