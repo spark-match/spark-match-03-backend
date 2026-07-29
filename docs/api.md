@@ -467,7 +467,38 @@ Preflight `OPTIONS` se responde **204** sin pasar al handler.
 
 ---
 
-## 9. Referencias
+## 9. Side effects (audit log)
+
+Toda operacin exitosa escribe una fila en `identity.audit_log` dentro
+de la **misma transaccin** que la mutacin de `users` (Patrn
+ADR-015). Esto aplica a:
+
+| Operacin | Audit action |
+|---|---|
+| `POST /v1/auth/register` | `user.registered` |
+| `POST /v1/auth/login` (success) | `user.login` (incluye `ip` + `userAgent`) |
+| `GET /v1/users/{id}` | `user.profile_viewed` |
+| `GET /v1/users` | `user.list_viewed` |
+| `PATCH /v1/users/me` | `user.profile_updated` |
+| `PUT /v1/users/me/password` | `user.password_changed` |
+| `PATCH /v1/users/{userId}` | `user.profile_updated` |
+| `POST /v1/users/{userId}/activate` | `user.activated` |
+| `POST /v1/users/{userId}/deactivate` | `user.deactivated` |
+
+**Importante**:
+
+- **Logins fallidos** NO escriben audit row (evita user enumeration via timing).
+- **Operaciones idempotentes no-op** (ej. `updateUser` con el mismo valor) NO escriben audit row.
+- **Errores 4xx/5xx** NO escriben audit row (la transaccin se rollback o abort early).
+- **Latencia agregada**: ~3ms por operation (single INSERT en la misma tx).
+
+Ver [ADR-015](./adr/015-audit-log-writes.md) para la lista completa de
+acciones, metadata schema, y tradeoffs. El `audit_log` es append-only
+y no tiene endpoint de lectura HTTP (backlog P3: `GET /v1/audit`).
+
+---
+
+## 10. Referencias
 
 - [`shared/src/http/api-response.ts`](../shared/src/http/api-response.ts) — envelope implementation.
 - [`shared/src/http/api-error.ts`](../shared/src/http/api-error.ts) — error code factory.
