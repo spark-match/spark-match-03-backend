@@ -1,6 +1,6 @@
 # Arquitectura del Backend — Spark Match
 
-> Documento vivo. Cambios sustantivos se registran en [DECISIONS.md](./DECISIONS.md).
+> Documento vivo. Cambios sustantivos se registran en [decisions.md](./decisions.md).
 
 ## 1. Resumen ejecutivo
 
@@ -378,3 +378,10 @@ Todos los workflows de `03-backend` son **callers** de los workflows reutilizabl
 | **Shared Kernel** | Código compartido entre contextos (mínimo, cuidadosamente versionado) |
 | **Cold Start** | Latencia de la primera invocación de una Lambda (init del runtime) |
 | **pgvector** | Extensión de Postgres para almacenar y buscar vectores (embeddings) |
+
+## 12. Documentos relacionados
+
+- [runtime-topology.md](./runtime-topology.md) — Vista operacional: rutas API Gateway, inventario de Lambdas, topología de DB (schemas por contexto), EventBridge producers/consumers.
+- [event-catalog.md](./event-catalog.md) — Single source of truth para payloads de eventos de dominio.
+- [folder-structure.md](./folder-structure.md) — Estructura de carpetas, capas, convenciones de naming.
+- [observability.md](./observability.md) — Logging estructurado, tracing X-Ray, métricas.

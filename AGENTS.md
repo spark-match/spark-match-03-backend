@@ -1,4 +1,4 @@
-# AGENTS.md — Spark Match Backend (spark-match-03-backend)
+﻿# AGENTS.md — Spark Match Backend (spark-match-03-backend)
 
 > Working agreement for AI agents (and humans) contributing to this repo.
 > Last updated: 28-jul-2026 (Sprint 1 hygiene pass; PRs #55/#57/#58/#59).
@@ -95,12 +95,12 @@ layers/                           # Lambda layer build artifacts
 migrations/                       # node-pg-migrate SQL files (V001+)
 .husky/                           # Git hooks (pre-commit, pre-push)
 docs/
-  ARCHITECTURE.md                 # Layered architecture overview
-  DECISIONS.md                    # ADR index
+  architecture.md                 # Layered architecture overview
+  decisions.md                    # ADR index
   adr/                            # One file per ADR (Nygard template)
-  EVENT_CATALOG.md                # EventBridge event JSON schemas
-  FOLDER_STRUCTURE.md             # Documented layout (some dirs aspirational)
-  OBSERVABILITY.md                # Powertools observability guide
+  event-catalog.md                # EventBridge event JSON schemas
+  folder-structure.md             # Documented layout (some dirs aspirational)
+  observability.md                # Powertools observability guide
 .github/
   workflows/ci.yml                # Delegates to spark-match-01-devops recipe
   dependabot.yml                  # Weekly npm updates (since Sprint 1 / PR #55)

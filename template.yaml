@@ -1,11 +1,11 @@
-AWSTemplateFormatVersion: '2010-09-09'
+﻿AWSTemplateFormatVersion: '2010-09-09'
 Transform:
   - AWS::Serverless-2016-10-31
 
 Description: >
   Spark Match Backend - Serverless DDD+EDA monolith (TypeScript on Node.js, AWS Lambda).
   The Python AI Advisor lives in the sibling repo spark-match-08-deep-agent.
-  See docs/ARCHITECTURE.md for the full design.
+  See docs/architecture.md for the full design.
 
 Parameters:
   Environment:
