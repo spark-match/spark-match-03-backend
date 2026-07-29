@@ -1,5 +1,5 @@
 -- =============================================================================
--- V004__create_audit_log.sql
+-- 004_create_audit_log.sql
 -- =============================================================================
 -- Append-only audit trail for sensitive identity events (login, role change,
 -- deactivation, ...). Inserted by the service layer (Phase 3+) from the

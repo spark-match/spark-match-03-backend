@@ -90,7 +90,6 @@ describe('migrate handler - node-pg-migrate options', () => {
     expect(call.migrationsTable).toBe('spark_match_migrations');
     expect(call.schema).toBe('public');
     expect(call.migrationsSchema).toBe('public');
-    expect(call.useGlob).toBe(true);
     expect(call.migrationFileLanguage).toBe('sql');
     expect(call.singleTransaction).toBe(true);
     expect(call.checkOrder).toBe(true);

@@ -78,7 +78,6 @@ export const handler = async (input: unknown): Promise<MigrateOutput> => {
       migrationsTable: TRACKING_TABLE,
       schema: TRACKING_SCHEMA,
       migrationsSchema: TRACKING_SCHEMA,
-      useGlob: true,
       migrationFileLanguage: 'sql' as const,
       count: 1,
       singleTransaction: true,
