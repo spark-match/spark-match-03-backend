@@ -11,7 +11,7 @@
 
 Existían 2 ADR-001 contradictorios en la organización:
 
-- `03-backend/DECISIONS.md` (este repo) ADR-001: "Lambda para todo el backend"
+- `03-backend/decisions.md` (este repo) ADR-001: "Lambda para todo el backend"
 - `00-knowledge-base/decisions/ADR-001-backend-hibrido-lambda-mas-agente.md` (Fabiola):
   "Híbrido: Lambda (CRUD/EDA) + servidor Python dedicado (agente)"
 

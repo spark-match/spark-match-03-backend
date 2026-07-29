@@ -7,11 +7,11 @@
 
 ```
 spark-match-03-backend/
-├── README.md                       # Quickstart + enlaces a ARCHITECTURE.md
-├── ARCHITECTURE.md                 # Diseño general (este repo)
-├── DECISIONS.md                    # ADR index
-├── EVENT_CATALOG.md                # Catálogo de eventos de dominio
-├── FOLDER_STRUCTURE.md             # Este documento
+├── README.md                       # Quickstart + enlaces a architecture.md
+├── architecture.md                 # Diseño general (este repo)
+├── decisions.md                    # ADR index
+├── event-catalog.md                # Catálogo de eventos de dominio
+├── folder-structure.md             # Este documento
 │
 ├── template.yaml                   # SAM template principal (orquestador)
 ├── samconfig.toml                  # Configuración SAM por entorno
@@ -232,7 +232,7 @@ RegisterUserFunction:
    npm run scripts/publish-schemas.ts
    ```
 
-6. **Documentar en `EVENT_CATALOG.md`** (añadir a la tabla de eventos v1 + matriz productor/consumidor)
+6. **Documentar en [`event-catalog.md`](./event-catalog.md)** (añadir a la tabla de eventos v1 + matriz productor/consumidor)
 
 ## 7. Cómo añadir un nuevo Bounded Context
 
@@ -260,7 +260,7 @@ RegisterUserFunction:
          TemplateURL: contexts/<new-context>/template.yaml
    ```
 
-6. **Actualizar `ARCHITECTURE.md`** y `EVENT_CATALOG.md`
+6. **Actualizar [`architecture.md`](./architecture.md)** y [`event-catalog.md`](./event-catalog.md)
 
 7. **PR con CODEOWNERS** del equipo correspondiente
 
