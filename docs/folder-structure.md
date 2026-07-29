@@ -31,7 +31,7 @@ spark-match-03-backend/
 ├── layers/                         # Lambda Layers
 │   └── node-runtime/               # zod, middy, powertools, kysely, pg, jose
 │
-├── migrations/                     # node-pg-migrate SQL files (V001+)
+├── migrations/                     # node-pg-migrate SQL files (001+)
 │
 ├── tests/                          # Test runner config + setup
 │
