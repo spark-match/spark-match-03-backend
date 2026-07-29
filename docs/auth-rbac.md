@@ -38,7 +38,31 @@ const DEFAULT_JWT_EXPIRES_SECONDS = 86400;
 **Qu handler firma el JWT**: solo `IdentityLoginFunction`. Cualquier otro
 cambio de identidad (`change-password`) **no** re-firma ni rota el JWT.
 
-### 1.1 TTL drift (importante)
+### 1.1 Login audit log
+
+`POST /v1/auth/login` escribe una fila en `identity.audit_log` con
+`action = 'user.login'` **nicamente en xito** (no cuando falla).
+
+| Campo | Origen | Notas |
+|---|---|---|
+| `subject_user_id` | `users.id` | El usuario que autentic |
+| `actor_user_id` | `NULL` | El actor es annimo (no hay JWT previo) |
+| `metadata` | `{ ip, userAgent }` | `ip` de `event.requestContext.http.sourceIp`; `userAgent` de `event.headers['user-agent'] ?? 'unknown'` |
+| `occurred_at` | `current_timestamp` | timestamp server-side |
+
+**Por qu NO escribir en login fallido?**
+
+Escribir un audit row en login fallido creara un side-channel de
+**user enumeration** via timing del audit log (un atacante puede
+distinguir "user no existe" vs "password incorrecta" observando
+presencia/ausencia del row). Para evitarlo, ambos paths de fallo
+(`user_not_found` y `invalid_password`) devuelven el mismo `401` y
+ninguno escribe audit row.
+
+Ver [ADR-015](./adr/015-audit-log-writes.md) § "Login audit" para
+ms detalle.
+
+### 1.2 TTL drift (importante)
 
 | Archivo | Valor | Usado? |
 |---|---|---|
