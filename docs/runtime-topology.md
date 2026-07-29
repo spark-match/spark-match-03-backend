@@ -306,19 +306,19 @@ Manager; ARN exposed via SSM `/spark-match/db/secret-arn`.
 ```
 spark_match (database)
 ├── public
-│   └── spark_match_migrations   ← node-pg-migrate tracking (created by V001)
+│   └── spark_match_migrations   ← node-pg-migrate tracking (created by 001)
 └── identity                    ← Identity context schema
-    ├── users                   ← V002 (+ role/active from V003)
-    └── audit_log               ← V004
+    ├── users                   ← 002 (+ role/active from 003)
+    └── audit_log               ← 004
 ```
 
 ### 5.1 Schemas / tables inventory
 
 | Schema | Table | Created by | Owner context |
 |---|---|---|---|
-| `public` | `spark_match_migrations` | V001 | shared (migrator) |
-| `identity` | `users` | V002 (base) + V003 (role, active) | Identity |
-| `identity` | `audit_log` | V004 | Identity |
+| `public` | `spark_match_migrations` | 001 | shared (migrator) |
+| `identity` | `users` | 002 (base) + 003 (role, active) | Identity |
+| `identity` | `audit_log` | 004 | Identity |
 
 **Future contexts** (Assessment, Career, Matching, Notifications) will
 each get their own schema (`assessment.*`, `career.*`, `matching.*`,
@@ -326,27 +326,27 @@ each get their own schema (`assessment.*`, `career.*`, `matching.*`,
 node-pg-migrate folders in a `migrations/<context>/` split once they
 land.
 
-### 5.2 `identity.users` (V002 + V003)
+### 5.2 `identity.users` (002 + 003)
 
 | Column | Type | Nullable | Default | Source |
 |---|---|---|---|---|
-| `id` | `UUID` | no | `gen_random_uuid()` | V002 |
-| `email` | `VARCHAR(255)` | no | — | V002 (`UNIQUE`, app-layer lowercase) |
-| `full_name` | `VARCHAR(255)` | no | — | V002 |
-| `password_hash` | `VARCHAR(255)` | no | — | V002 (`scrypt$N$r$p$<salt>$<hash>`) |
-| `age` | `SMALLINT` | yes | — | V002 |
-| `created_at` | `TIMESTAMPTZ` | no | `current_timestamp` | V002 |
-| `updated_at` | `TIMESTAMPTZ` | no | `current_timestamp` | V002 + auto-touch trigger |
-| `role` | `TEXT` | no | `'admin'` | V003 (`CHECK role IN ('admin')`) |
-| `active` | `BOOLEAN` | no | `TRUE` | V003 |
+| `id` | `UUID` | no | `gen_random_uuid()` | 002 |
+| `email` | `VARCHAR(255)` | no | — | 002 (`UNIQUE`, app-layer lowercase) |
+| `full_name` | `VARCHAR(255)` | no | — | 002 |
+| `password_hash` | `VARCHAR(255)` | no | — | 002 (`scrypt$N$r$p$<salt>$<hash>`) |
+| `age` | `SMALLINT` | yes | — | 002 |
+| `created_at` | `TIMESTAMPTZ` | no | `current_timestamp` | 002 |
+| `updated_at` | `TIMESTAMPTZ` | no | `current_timestamp` | 002 + auto-touch trigger |
+| `role` | `TEXT` | no | `'admin'` | 003 (`CHECK role IN ('admin')`) |
+| `active` | `BOOLEAN` | no | `TRUE` | 003 |
 
 Indexes:
 
 | Index | Columns | Source |
 |---|---|---|
-| `users_pkey` | `id` | V002 (implicit) |
-| `users_email_key` | `email` | V002 (implicit UNIQUE) |
-| `identity_users_active_email_idx` | `(active, email)` | V003 — supports `list-users` filter+sort |
+| `users_pkey` | `id` | 002 (implicit) |
+| `users_email_key` | `email` | 002 (implicit UNIQUE) |
+| `identity_users_active_email_idx` | `(active, email)` | 003 — supports `list-users` filter+sort |
 
 Triggers:
 
@@ -354,7 +354,7 @@ Triggers:
 |---|---|---|
 | `users_touch_updated_at` | `BEFORE UPDATE` | Sets `NEW.updated_at = current_timestamp` |
 
-### 5.3 `identity.audit_log` (V004)
+### 5.3 `identity.audit_log` (004)
 
 Append-only audit trail. Inserted from the **same transaction** as the
 business change (so a failed audit write rolls back the change).
@@ -379,16 +379,16 @@ Indexes:
 
 > **Compliance TODO (Sprint 5+)**: revoke `UPDATE`/`DELETE` on
 > `identity.audit_log` for the application's DB role. Currently a
-> comment in V004.
+> comment in 004.
 
 ### 5.4 Migration history
 
 | Version | Description | Applied via |
 |---|---|---|
-| `V001__create_identity_schema_and_tracking.sql` | `identity` schema + `public.spark_match_migrations` table | `IdentityMigrateFunction` |
-| `V002__create_users_table.sql` | `identity.users` base table + `touch_updated_at` trigger | `IdentityMigrateFunction` |
-| `V003__add_role_and_active_to_users.sql` | `role`, `active` columns + `(active, email)` index | `IdentityMigrateFunction` |
-| `V004__create_audit_log.sql` | `identity.audit_log` table + 3 indexes | `IdentityMigrateFunction` |
+| `001_create_identity_schema_and_tracking.sql` | `identity` schema + `public.spark_match_migrations` table | `IdentityMigrateFunction` |
+| `002_create_users_table.sql` | `identity.users` base table + `touch_updated_at` trigger | `IdentityMigrateFunction` |
+| `003_add_role_and_active_to_users.sql` | `role`, `active` columns + `(active, email)` index | `IdentityMigrateFunction` |
+| `004_create_audit_log.sql` | `identity.audit_log` table + 3 indexes | `IdentityMigrateFunction` |
 
 Manual invocation:
 

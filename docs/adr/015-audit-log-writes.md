@@ -4,9 +4,9 @@
 
 ### Contexto
 
-La tabla `identity.audit_log` se cre en V004 (Sprint 1) con la promesa de
+La tabla `identity.audit_log` se cre en 004 (Sprint 1) con la promesa de
 "inserted by the service layer from the **same transaction** as the change"
-(`migrations/V004__create_audit_log.sql:5-7`). Sin embargo, ningn
+(`migrations/004_create_audit_log.sql:5-7`). Sin embargo, ningn
 service handler escribe audit rows hoy.
 
 Tres problemas concretos:
@@ -29,8 +29,8 @@ queda como latent vector de auditora.
 
 | Opcin | Pros | Contras |
 |---|---|---|
-| **Sync writes in same transaction** | Atomicidad real (V004); no hay rows fantasma | Ms latencia (~3ms); requiere tx wrapper |
-| Async writes (fire-and-forget) | No bloquea el handler | Pierde audit rows ante crash; viola V004 |
+| **Sync writes in same transaction** | Atomicidad real (004); no hay rows fantasma | Ms latencia (~3ms); requiere tx wrapper |
+| Async writes (fire-and-forget) | No bloquea el handler | Pierde audit rows ante crash; viola 004 |
 | Async writes via EventBridge consumer | Desacopla; escala | EventBridge eventually-consistent; gap forensics |
 | Log-only (CloudWatch) | Sin cambios en DB | No queryable; no preservable post-rotation |
 
@@ -52,7 +52,7 @@ cubriendo **9 acciones**:
 | `user.list_viewed` | `listUsers` | null | actor.id | `{ filterCount, returnedCount }` |
 
 **Naming**: dot.notation (`user.registered`, `user.password_changed`)
-para coincidir con el ejemplo de V004 (`migrations/V004__create_audit_log.sql:18`)
+para coincidir con el ejemplo de 004 (`migrations/004_create_audit_log.sql:18`)
 y ser grep-friendly.
 
 **Transacciones**: se introduce un `withTransaction(fn)` helper
@@ -106,11 +106,11 @@ soporta `Transaction<Database>` con la misma API.
   (P2: partition por mes, archive a S3)
 
 **Mitigaciones**:
-- Indexes ya existentes en V004 cubren queries esperadas
+- Indexes ya existentes en 004 cubren queries esperadas
   (per-user history, action-type reports)
-- `audit_log` es append-only (V004:20-21); no UPDATE/DELETE en SQL
+- `audit_log` es append-only (004:20-21); no UPDATE/DELETE en SQL
 - Compliance puede revocar UPDATE/DELETE con una migracin futura
-  (mencionado en V004:21)
+  (mencionado en 004:21)
 
 ### Out of scope (track elsewhere)
 
@@ -124,7 +124,7 @@ soporta `Transaction<Database>` con la misma API.
 
 ### Referencias
 
-- `migrations/V004__create_audit_log.sql` — schema y comentario
+- `migrations/004_create_audit_log.sql` — schema y comentario
   "same transaction" mandating
 - `docs/data-model.md:73-94, 240-241, 250` — gap documented
 - `docs/runbook.md:378` — backlog ticket
