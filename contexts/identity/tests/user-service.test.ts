@@ -50,8 +50,21 @@ function makeDeps() {
     ),
     list: vi.fn().mockResolvedValue({ users: [], nextCursor: null }),
     count: vi.fn().mockResolvedValue(0),
+    withDb: vi.fn().mockReturnThis(),
   };
-  return { eventPublisher, userRepository };
+  const auditRepository = {
+    insert: vi.fn().mockResolvedValue(undefined),
+    withDb: vi.fn().mockReturnThis(),
+  };
+  // Mock db whose transaction() immediately runs the callback with a
+  // sentinel tx handle. The repos' withDb() is mocked to return this.
+  const db = {
+    transaction: vi.fn().mockImplementation(() => ({
+      setIsolationLevel: vi.fn().mockReturnThis(),
+      execute: (fn: (tx: 'tx') => Promise<unknown>) => fn('tx'),
+    })),
+  };
+  return { db, eventPublisher, userRepository, auditRepository };
 }
 
 beforeEach(() => {
@@ -136,7 +149,12 @@ describe('userService.authenticate', () => {
     );
     const service = createUserService(deps);
 
-    const user = await service.authenticate('self@example.com', 'correctPass123');
+    const user = await service.authenticate({
+      email: 'self@example.com',
+      password: 'correctPass123',
+      ip: '203.0.113.1',
+      userAgent: 'jest',
+    });
     expect(user.id).toBe(SELF_ID);
     expect(deps.eventPublisher.publish).toHaveBeenCalledWith(
       expect.objectContaining({ detailType: 'UserLoggedIn' }),
@@ -151,7 +169,12 @@ describe('userService.authenticate', () => {
     const service = createUserService(deps);
 
     await expect(
-      service.authenticate('self@example.com', 'pass1234'),
+      service.authenticate({
+        email: 'self@example.com',
+        password: 'pass1234',
+        ip: '203.0.113.1',
+        userAgent: 'jest',
+      }),
     ).rejects.toMatchObject({
       statusCode: 403,
       code: 'forbidden',
@@ -164,7 +187,12 @@ describe('userService.authenticate', () => {
     const service = createUserService(deps);
 
     await expect(
-      service.authenticate('noone@example.com', 'pass1234'),
+      service.authenticate({
+        email: 'noone@example.com',
+        password: 'pass1234',
+        ip: '203.0.113.1',
+        userAgent: 'jest',
+      }),
     ).rejects.toMatchObject({
       statusCode: 401,
       code: 'unauthorized',
@@ -181,7 +209,12 @@ describe('userService.authenticate', () => {
     const service = createUserService(deps);
 
     await expect(
-      service.authenticate('self@example.com', 'wrongPass123'),
+      service.authenticate({
+        email: 'self@example.com',
+        password: 'wrongPass123',
+        ip: '203.0.113.1',
+        userAgent: 'jest',
+      }),
     ).rejects.toMatchObject({
       statusCode: 401,
       code: 'unauthorized',
@@ -563,5 +596,208 @@ describe('userService.listUsers', () => {
       service.listUsers({ actorUserId: SELF_ID, filters: { limit: 10 } }),
     ).rejects.toMatchObject({ statusCode: 403 });
     expect(deps.userRepository.list).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// audit log writes (ADR-015)
+// =============================================================================
+// Each public userService method must write exactly one audit row per action
+// (or zero on idempotent no-op). The tests below are the source of truth for
+// the audit-log contract.
+
+describe('userService - audit log writes', () => {
+  it('register writes user.registered with anonymous actor and metadata', async () => {
+    const deps = makeDeps();
+    const service = createUserService(deps);
+
+    await service.register({
+      email: 'new@example.com',
+      password: 'securePass123',
+      fullName: 'New User',
+    });
+
+    expect(deps.auditRepository.insert).toHaveBeenCalledWith({
+      actorUserId: null,
+      subjectUserId: SELF_ID,
+      action: 'user.registered',
+      metadata: { email: 'self@example.com', role: 'admin' },
+    });
+  });
+
+  it('authenticate (success) writes user.login with ip/userAgent', async () => {
+    const deps = makeDeps();
+    const passwordHash = await hashPassword('correctPass123');
+    deps.userRepository.findByEmail.mockResolvedValue(
+      makeUser({ passwordHash, active: true }),
+    );
+    const service = createUserService(deps);
+
+    await service.authenticate({
+      email: 'self@example.com',
+      password: 'correctPass123',
+      ip: '203.0.113.1',
+      userAgent: 'jest',
+    });
+
+    expect(deps.auditRepository.insert).toHaveBeenCalledWith({
+      actorUserId: null,
+      subjectUserId: SELF_ID,
+      action: 'user.login',
+      metadata: { ip: '203.0.113.1', userAgent: 'jest' },
+    });
+  });
+
+  it('authenticate (failure) does NOT write audit row (no user enumeration)', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findByEmail.mockResolvedValue(null);
+    const service = createUserService(deps);
+
+    await expect(
+      service.authenticate({
+        email: 'noone@example.com',
+        password: 'wrong',
+        ip: '203.0.113.1',
+        userAgent: 'jest',
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+
+    expect(deps.auditRepository.insert).not.toHaveBeenCalled();
+  });
+
+  it('getUser writes user.profile_viewed with actor metadata', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById
+      .mockResolvedValueOnce(makeUser({ id: SELF_ID, role: 'admin' }))
+      .mockResolvedValueOnce(makeUser({ id: OTHER_ID }));
+    const service = createUserService(deps);
+
+    await service.getUser({ actorUserId: SELF_ID, targetUserId: OTHER_ID });
+
+    expect(deps.auditRepository.insert).toHaveBeenCalledWith({
+      actorUserId: SELF_ID,
+      subjectUserId: OTHER_ID,
+      action: 'user.profile_viewed',
+      metadata: {},
+    });
+  });
+
+  it('changePassword writes user.password_changed with empty metadata', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById.mockResolvedValue(
+      makeUser({ id: SELF_ID, role: 'admin' }),
+    );
+    const service = createUserService(deps);
+
+    await service.changePassword({
+      actorUserId: SELF_ID,
+      targetUserId: SELF_ID,
+      newPassword: 'newPass123',
+    });
+
+    expect(deps.auditRepository.insert).toHaveBeenCalledWith({
+      actorUserId: SELF_ID,
+      subjectUserId: SELF_ID,
+      action: 'user.password_changed',
+      metadata: {},
+    });
+  });
+
+  it('updateUser writes user.profile_updated with changedFields/old/new', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById
+      .mockResolvedValueOnce(makeUser({ id: SELF_ID, role: 'admin' }))
+      .mockResolvedValueOnce(makeUser({ id: SELF_ID, fullName: 'Old', age: 30 }));
+    deps.userRepository.update.mockResolvedValue(
+      makeUser({ id: SELF_ID, fullName: 'New', age: 31 }),
+    );
+    const service = createUserService(deps);
+
+    await service.updateUser({
+      actorUserId: SELF_ID,
+      targetUserId: SELF_ID,
+      changes: { fullName: 'New', age: 31 },
+    });
+
+    expect(deps.auditRepository.insert).toHaveBeenCalledWith({
+      actorUserId: SELF_ID,
+      subjectUserId: SELF_ID,
+      action: 'user.profile_updated',
+      metadata: {
+        changedFields: ['fullName', 'age'],
+        old: { fullName: 'Old', age: 30 },
+        new: { fullName: 'New', age: 31 },
+      },
+    });
+  });
+
+  it('deactivateUser (transition) writes user.deactivated', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById
+      .mockResolvedValueOnce(makeUser({ id: SELF_ID, role: 'admin' }))
+      .mockResolvedValueOnce(makeUser({ id: OTHER_ID, active: true }));
+    const service = createUserService(deps);
+
+    await service.deactivateUser({ actorUserId: SELF_ID, targetUserId: OTHER_ID });
+
+    expect(deps.auditRepository.insert).toHaveBeenCalledWith({
+      actorUserId: SELF_ID,
+      subjectUserId: OTHER_ID,
+      action: 'user.deactivated',
+      metadata: {},
+    });
+  });
+
+  it('deactivateUser (idempotent no-op) does NOT write audit row', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById
+      .mockResolvedValueOnce(makeUser({ id: SELF_ID, role: 'admin' }))
+      .mockResolvedValueOnce(makeUser({ id: OTHER_ID, active: false }));
+    const service = createUserService(deps);
+
+    await service.deactivateUser({ actorUserId: SELF_ID, targetUserId: OTHER_ID });
+
+    expect(deps.auditRepository.insert).not.toHaveBeenCalled();
+  });
+
+  it('activateUser (transition) writes user.activated', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById
+      .mockResolvedValueOnce(makeUser({ id: SELF_ID, role: 'admin' }))
+      .mockResolvedValueOnce(makeUser({ id: OTHER_ID, active: false }));
+    const service = createUserService(deps);
+
+    await service.activateUser({ actorUserId: SELF_ID, targetUserId: OTHER_ID });
+
+    expect(deps.auditRepository.insert).toHaveBeenCalledWith({
+      actorUserId: SELF_ID,
+      subjectUserId: OTHER_ID,
+      action: 'user.activated',
+      metadata: {},
+    });
+  });
+
+  it('listUsers writes user.list_viewed with filter/returned counts', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById.mockResolvedValue(
+      makeUser({ id: SELF_ID, role: 'admin' }),
+    );
+    deps.userRepository.list.mockResolvedValue({
+      users: [makeUser()],
+      nextCursor: null,
+    });
+    const service = createUserService(deps);
+
+    await service.listUsers({
+      actorUserId: SELF_ID,
+      filters: { limit: 10, emailContains: 'a' },
+    });
+
+    expect(deps.auditRepository.insert).toHaveBeenCalledWith({
+      actorUserId: SELF_ID,
+      subjectUserId: null,
+      action: 'user.list_viewed',
+      metadata: { filterCount: 2, returnedCount: 1 },
+    });
   });
 });

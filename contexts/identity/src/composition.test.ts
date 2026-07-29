@@ -106,6 +106,7 @@ describe('buildContext', () => {
     expect(ctx.eventPublisher).toBeDefined();
     expect(ctx.db).toBeDefined();
     expect(ctx.userRepository).toBeDefined();
+    expect(ctx.auditRepository).toBeDefined();
     expect(ctx.userService).toBeDefined();
     expect(ctx.jwtSigner).toBeDefined();
     expect(typeof ctx.signForUser).toBe('function');
