@@ -1,5 +1,5 @@
 -- =============================================================================
--- V003__add_role_and_active_to_users.sql
+-- 003_add_role_and_active_to_users.sql
 -- =============================================================================
 -- Adds RBAC fields to `identity.users` ahead of the Phase 3 service-layer
 -- refactor (see BACKEND-UPGRADE.md). For now the application does NOT read

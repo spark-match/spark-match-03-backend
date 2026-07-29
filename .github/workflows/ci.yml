@@ -32,3 +32,25 @@ jobs:
       fail-on-quality-gate: ${{ vars.SONAR_FAIL_ON_QUALITY_GATE }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # SPRINT 2 - migrations-dry-run: catches SQL sequence bugs (CHECK constraints,
+  # FK violations, idempotency failures) at PR time. Uses an ephemeral
+  # postgres:17 service container via the devops reusable workflow.
+  # No AWS credentials, no access to RDS. Tracking table matches backend
+  # package.json:migrate:* scripts (spark_match_migrations). See ADR-016.
+  migrations-dry-run:
+    needs: []
+    uses: spark-match/spark-match-01-devops/.github/workflows/migrations-dry-run.yml@main
+    with:
+      environment-name: 'ci'
+      postgres-version: '17'
+      postgres-user: 'postgres'
+      postgres-password: 'postgres'
+      postgres-db: 'spark_match_test'
+      migrations-dir: 'migrations'
+      migrations-table: 'spark_match_migrations'
+      migrations-schema: 'public'
+      node-version: '24'
+      working-directory: '.'
+      npm-script: 'migrate:up'
+      timeout-minutes: 10
