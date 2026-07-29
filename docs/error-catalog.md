@@ -227,7 +227,31 @@ if (detailCode === 'validation.invalid_format') {
 
 ---
 
-## 8. Referencias cruzadas
+## 8. Side effects (audit log) en errores
+
+Una pregunta frecuente: "cuando un endpoint devuelve 4xx o 5xx,
+se escribe una fila en `identity.audit_log`?"
+
+**Respuesta corta**: NO. Solo las operaciones **exitosas** escriben audit row.
+
+| HTTP status | Audit row? | Por qu |
+|---|---|---|
+| `2xx` (success) | **S** | El service layer envuelve la mutacin + `audit_log.insert` en una sola `db.transaction()` (Patrn ADR-015). |
+| `4xx` (client error) | **No** | El handler aborta antes de invocar `UserService`. Ni siquiera se abre transaccin. |
+| `5xx` (server error) | **No** | La transaccin se rollback, lo que incluye el `audit_log.insert` (atomicidad). |
+
+**Caso especial — login fallido**: aunque devuelve `401`, el service
+layer aborta antes de `withTransaction(...)` (no hay mutacin de
+`users` para envolver). Ver [auth-rbac.md § 1.1](./auth-rbac.md) para
+ms detalle sobre por qu no escribir `user.login` en failure.
+
+**Caso especial — idempotencia**: si una operacin idempotente (ej.
+`updateUser` con el mismo valor) retorna `200` pero **no** cambia
+ninguna fila, **no** se escribe audit row. Ver ADR-015 § "Decisin".
+
+---
+
+## 9. Referencias cruzadas
 
 - [`shared/src/http/api-error.ts`](../shared/src/http/api-error.ts) — clase `ApiError` y factories.
 - [`shared/src/http/error-detail.ts`](../shared/src/http/error-detail.ts) — `ErrorDetail` interface.
