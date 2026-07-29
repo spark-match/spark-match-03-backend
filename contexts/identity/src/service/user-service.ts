@@ -45,6 +45,40 @@ import type {
 const SOURCE = 'spark-match.identity';
 const nowIso = (): string => new Date().toISOString();
 
+/**
+ * Builds the actorUserId/subjectUserId metadata for an audit row.
+ * `actorUserId` is null for anonymous actions (register, login).
+ */
+function actorMeta(
+  actorUserId: string | null,
+  subjectUserId: string | null,
+): Pick<AuditEntry, 'actorUserId' | 'subjectUserId'> {
+  return { actorUserId, subjectUserId };
+}
+
+/**
+ * Filters the user mutation payload to only the fields we audit
+ * (fullName, age) and returns the { old, new } snapshot for the audit row.
+ * Extracted from updateUser to reduce its cognitive complexity.
+ */
+function collectChangeDiff(
+  target: User,
+  next: User,
+  changes: UpdateUserInput,
+): { old: { fullName?: string; age?: number | null }; new: { fullName?: string; age?: number | null } } {
+  const oldValues: { fullName?: string; age?: number | null } = {};
+  const newValues: { fullName?: string; age?: number | null } = {};
+  if ('fullName' in changes) {
+    oldValues.fullName = target.fullName;
+    newValues.fullName = next.fullName;
+  }
+  if ('age' in changes) {
+    oldValues.age = target.age;
+    newValues.age = next.age;
+  }
+  return { old: oldValues, new: newValues };
+}
+
 export interface RegisterInput {
   email: string;
   password: string;
@@ -90,13 +124,7 @@ export function createUserService(deps: {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
-  /**
-   * Builds the actorUserId/subjectUserId metadata for an audit row.
-   * `actorUserId` is null for anonymous actions (register, login).
-   */
-  function actorMeta(actorUserId: string | null, subjectUserId: string | null): Pick<AuditEntry, 'actorUserId' | 'subjectUserId'> {
-    return { actorUserId, subjectUserId };
-  }
+
 
   return {
     async register({ email, password, fullName, age }) {
@@ -264,6 +292,7 @@ export function createUserService(deps: {
           throw ApiError.forbidden('Account is deactivated');
         }
         const isSelf = actor.id === targetUserId;
+        const isAdmin = actor.role === 'admin';
 
         // Self rules: fullName and age are editable; role/active are NOT.
         if (isSelf) {
@@ -274,38 +303,26 @@ export function createUserService(deps: {
             throw ApiError.forbidden('Cannot change own active state');
           }
         }
-
-        const isAdmin = actor.role === 'admin';
+        // Non-self requires admin.
         if (!isSelf && !isAdmin) {
           throw ApiError.forbidden('Insufficient privileges to access this resource');
         }
+
         const target = await userRepo.findById(targetUserId);
         if (!target) {
           throw ApiError.userNotFound();
         }
 
         const next = await userRepo.update(target.id, changes);
-
-        const changedFields = Object.keys(changes);
-        const oldValues: { fullName?: string; age?: number | null } = {};
-        const newValues: { fullName?: string; age?: number | null } = {};
-        for (const field of changedFields) {
-          if (field === 'fullName') {
-            oldValues.fullName = target.fullName;
-            newValues.fullName = next.fullName;
-          } else if (field === 'age') {
-            oldValues.age = target.age;
-            newValues.age = next.age;
-          }
-        }
+        const diff = collectChangeDiff(target, next, changes);
 
         await auditRepo.insert({
           ...actorMeta(actorUserId, target.id),
           action: 'user.profile_updated',
           metadata: {
-            changedFields,
-            old: oldValues,
-            new: newValues,
+            changedFields: Object.keys(changes),
+            old: diff.old,
+            new: diff.new,
           },
         });
 
