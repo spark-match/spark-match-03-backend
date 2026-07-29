@@ -246,7 +246,42 @@ transicin efectiva, y el actor es **admin no-actuando-sobre-s-mismo**).
 
 ---
 
-## 3. Matriz productor ↔ consumidor
+## 3. Side effects (audit_log) — dual write
+
+Cada operacin que emite un EventBridge event **tambin** escribe una fila
+en `identity.audit_log` (Patrn ADR-015). Los dos mecanismos son
+**complementarios**, no duplicados:
+
+| | `audit_log` (DB) | EventBridge (bus) |
+|---|---|---|
+| **Durabilidad** | Fuerte (PG, transactional) | Best-effort (at-least-once) |
+| **Latencia** | ~3ms (sync en la tx) | ~5-10ms (async post-commit) |
+| **Consumidores** | Solo admin tool (futuro `GET /v1/audit`) | Assessment, Career, Matching, Notifications, AI Advisor |
+| **Forma** | `action`, `subject_user_id`, `metadata` | `detail.data.schemaVersion`, `detail.data.occurredAt`, payload |
+| **Si falla** | Rollback de la mutacin de `users` (atmica) | Solo log warn; no afecta la mutacin |
+
+**Mapping** (action → event):
+
+| `audit_log.action` | EventBridge event |
+|---|---|
+| `user.registered` | `UserRegistered` |
+| `user.login` | `UserLoggedIn` |
+| `user.profile_viewed` | (ninguno — read-only) |
+| `user.profile_updated` | `UserUpdated` |
+| `user.password_changed` | `UserPasswordChanged` |
+| `user.activated` | `UserActivated` |
+| `user.deactivated` | `UserDeactivated` |
+| `user.role_changed` | (envelope-level `roleChanged=true` flag en `UserUpdated`) |
+| `user.list_viewed` | (ninguno — read-only) |
+
+**Nota operacional**: el `audit_log` es la **nica fuente de verdad**
+forense (compliance / GDPR Art. 30). Los EventBridge events son para
+fan-out a bounded contexts downstream, pero **no** se debe confiar en
+ellos para auditora (pueden perderse si EventBridge falla).
+
+---
+
+## 4. Matriz productor ↔ consumidor
 
 | Evento | Identity (P) | Assessment | Career | Matching | AI Advisor | Notifications |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -262,12 +297,12 @@ transicin efectiva, y el actor es **admin no-actuando-sobre-s-mismo**).
 
 ---
 
-## 4. Eventos planificados (futuros contextos)
+## 5. Eventos planificados (futuros contextos)
 
 > **No en cdigo**. Documentados para fijar el contrato anticipado. **No**
 > se pueden consumir an: el handler no existe.
 
-### 4.1 AssessmentStarted (planned)
+### 5.1 AssessmentStarted (planned)
 
 **Producido por**: Assessment Context → `assessments.create()`.  
 **Trigger**: `POST /v1/assessments`.
@@ -283,7 +318,7 @@ transicin efectiva, y el actor es **admin no-actuando-sobre-s-mismo**).
 }
 ```
 
-### 4.2 AssessmentCompleted (planned)
+### 5.2 AssessmentCompleted (planned)
 
 **Producido por**: Assessment Context. **Consumidores clave**: Matching.
 
@@ -301,26 +336,26 @@ transicin efectiva, y el actor es **admin no-actuando-sobre-s-mismo**).
 }
 ```
 
-### 4.3 CareerCreated (planned)
+### 5.3 CareerCreated (planned)
 
 **Producido por**: Career Context. **Consumidores clave**: AI Advisor
 (reindex RAG), Matching.
 
-### 4.4 CareerUpdated (planned)
+### 5.4 CareerUpdated (planned)
 
 **Producido por**: Career Context. **Consumidores clave**: AI Advisor
 (reindex RAG), Matching (recalcular scores).
 
-### 4.5 RecommendationGenerated (planned)
+### 5.5 RecommendationGenerated (planned)
 
 **Producido por**: Matching Context. **Consumidores clave**: Notifications,
 Analytics.
 
-### 4.6 MessageSent (planned)
+### 5.6 MessageSent (planned)
 
 **Producido por**: AI Advisor Context (otro repo).
 
-### 4.7 KnowledgeDocIngested (planned)
+### 5.7 KnowledgeDocIngested (planned)
 
 **Producido por**: AI Advisor Context.
 
@@ -329,7 +364,7 @@ Analytics.
 
 ---
 
-## 5. Versionado histrico
+## 6. Versionado histrico
 
 | Evento | v1 publicado | Notas |
 |---|---|---|
@@ -343,7 +378,7 @@ Analytics.
 
 ---
 
-## 6. Prximos eventos a documentar (backlog)
+## 7. Prximos eventos a documentar (backlog)
 
 - `MatchingFailed` — cuando el engine no puede generar recomendaciones.
 - `ConversationStarted` — para analytics de engagement.
