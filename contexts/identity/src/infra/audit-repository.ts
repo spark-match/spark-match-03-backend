@@ -22,7 +22,6 @@
 // =============================================================================
 
 import type { Kysely, Transaction } from 'kysely';
-import { sql } from 'kysely';
 import { withDbErrorMapping } from '@spark-match/shared/infra';
 import type { AuditEntry } from '../domain/audit.js';
 import type { Database } from './database.js';
@@ -160,9 +159,10 @@ export function createAuditRepository(
         const entries = rows.slice(0, limit).map(mapRowToEntry);
         const hasMore = rows.length > limit;
 
+        const lastEntry = entries.at(-1);
         const nextCursor =
-          hasMore && entries.length > 0
-            ? encodeCursor(entries[entries.length - 1].occurredAt!, entries[entries.length - 1].id!)
+          hasMore && lastEntry
+            ? encodeCursor(lastEntry.occurredAt!, lastEntry.id!)
             : null;
 
         return { entries, nextCursor };
