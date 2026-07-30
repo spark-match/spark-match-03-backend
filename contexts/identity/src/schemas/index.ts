@@ -54,3 +54,12 @@ export {
 
 export { ActivateUserOutputSchema, type ActivateUserOutput } from './activate-user.schema.js';
 export { DeactivateUserOutputSchema, type DeactivateUserOutput } from './deactivate-user.schema.js';
+
+export {
+  AuditEntrySchema,
+  AuditListInputSchema,
+  AuditListOutputSchema,
+  type AuditEntry,
+  type AuditListInput,
+  type AuditListOutput,
+} from './audit.schema.js';
