@@ -49,10 +49,7 @@ export const handler = buildHandler<AuditListInput, AuditListOutput>({
     };
 
     const ctx = await buildContext();
-    const result = await ctx.auditService.listAuditEntries(
-      { userId: auth.userId, email: auth.email, role: auth.role },
-      filters,
-    );
+    const result = await ctx.auditService.listAuditEntries(auth, filters);
 
     return {
       entries: result.entries.map((e) => ({

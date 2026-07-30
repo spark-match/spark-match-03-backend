@@ -17,4 +17,8 @@ export const PublicUserSchema = z.object({
 });
 export type PublicUser = z.infer<typeof PublicUserSchema>;
 
+// Convenience alias for the GET /v1/users/me response. Some handlers
+// (audit.ts) need the return type, not the schema itself.
+export type GetMeOutput = PublicUser;
+
 export const GetMeOutputSchema = PublicUserSchema;
