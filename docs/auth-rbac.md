@@ -182,23 +182,36 @@ Las reglas viven en
 | `deactivateUser` self-rule: no puede desactivarse | `user-service.ts:243-245` | |
 | `listUsers` admin-only | `user-service.ts:284-286` | |
 
-### 3.2 ⚠️ Inconsistencia Authorizer
+### 3.2 ✅ Authorizer wiring (resuelto Sprint 3)
 
-**Estado**: solo 1 de 8 rutas protegidas invoca `IdentityAuthorizer` en
-API Gateway. Las otras dependen del middleware `requireAuth` en el
-handler. **Esto funciona** (defense in depth) pero:
+**Estado actual (2026-07-30, PR-#79)**: las **7 rutas protegidas**
+están wireadas al `IdentityAuthorizer` en API Gateway:
 
-- El Authorizer Lambda corre 1/8 de las veces.
-- En `sam local invoke` (sin API Gateway) **todas** las rutas dependen
-  del middleware → hay que mockear el Authorizer context o el Bearer
-  fallback (ver `requireAuth()` en
-  [`shared/src/auth/require-auth.ts`](../shared/src/auth/require-auth.ts)).
-- Tests E2E futuros requieren API Gateway real para validar el flujo
-  completo.
+| Ruta | Authorizer |
+|---|---|
+| `GET /v1/users/me` | ✅ `!Ref IdentityAuthorizer` |
+| `PATCH /v1/users/me` | ✅ `!Ref IdentityAuthorizer` |
+| `PUT /v1/users/me/password` | ✅ `!Ref IdentityAuthorizer` |
+| `GET /v1/users` | ✅ `!Ref IdentityAuthorizer` |
+| `PATCH /v1/users/{userId}` | ✅ `!Ref IdentityAuthorizer` |
+| `POST /v1/users/{userId}/activate` | ✅ `!Ref IdentityAuthorizer` |
+| `POST /v1/users/{userId}/deactivate` | ✅ `!Ref IdentityAuthorizer` |
 
-**Plan (Sprint 3)**: wirear las 8 rutas restantes al Authorizer.
-Deprecacin del middleware `requireAuth` para rutas protegidas. Ver
-`RUNTIME-TOPOLOGY.md § 3.1`.
+Las 2 rutas públicas (sin Authorizer, esperadas):
+
+| Ruta | Auth |
+|---|---|
+| `POST /v1/auth/register` | público |
+| `POST /v1/auth/login` | público |
+
+**Defense in depth**: el middleware `requireAuth` permanece como
+fallback (Bearer header) en todos los handlers protegidos. Esto cubre
+el caso `sam local invoke` (sin API Gateway) y tests E2E que no
+montan el Authorizer.
+
+> **Histórico**: antes de PR-#79, 1/8 rutas usaba Authorizer y 7/8
+> dependían exclusivamente del middleware. Defense in depth funcionaba
+> pero el Authorizer Lambda corría solo 12% de las veces.
 
 ---
 
