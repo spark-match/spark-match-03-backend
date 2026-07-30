@@ -255,25 +255,48 @@ en propagarse a todos los Lambdas.
 
 ---
 
-## 5. CORS y `Access-Control-Allow-Origin: '*'`
+## 5. CORS configurable (allowlist)
 
-`template.yaml:73-90` configura CORS con `AllowOrigins: '*'`. Esto es
-**intencional para dev** pero **debe tightening antes de prod**:
+Configurado via el parametro CloudFormation `CorsAllowedOrigins`
+(`template.yaml`). Es `CommaDelimitedList` — el backend lo parsea y
+lo pasa a cada Lambda como env var `CORS_ALLOWED_ORIGINS`.
 
-- Dev: `*` (acepta cualquier origen).
-- Prod: dominios especficos via custom domain + WAF rules.
+| Entorno | Valor recomendado |
+|---|---|
+| dev | `CorsAllowedOrigins='*'` (default) |
+| staging | `CorsAllowedOrigins='https://staging.example.com'` |
+| prod | `CorsAllowedOrigins='https://app.example.com,https://admin.example.com'` |
 
-**Header sent** en cada respuesta:
+**Comportamiento del allowlist**:
+
+- Si el allowlist es `*` (o la env var est unset), el middleware
+  responde con `Access-Control-Allow-Origin: *` (modo dev).
+- Si el allowlist es una lista explcita, el middleware **echoea
+  el `Origin` header del request** cuando est en la lista, y
+  **omite** el header cuando no est. El browser bloquea la
+  respuesta en el segundo caso.
+
+**Header set en cada respuesta** (cuando aplica):
 
 ```
-Access-Control-Allow-Origin: *
+Access-Control-Allow-Origin: <origin-allowlisted>
+Vary: Origin
 Access-Control-Allow-Headers: Content-Type, Authorization, X-Correlation-Id
 Access-Control-Allow-Methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
 Access-Control-Expose-Headers: X-Correlation-Id
 ```
 
-Preflight `OPTIONS` se responde **204** sin pasar al handler (ver
-[`build-handler.ts:97-107`](../shared/src/templates/build-handler.ts)).
+**Implementado en 2 capas** (defense in depth):
+- `template.yaml` (HttpApi `CorsConfiguration.AllowOrigins`) — el
+  API Gateway valida antes de invocar el Lambda.
+- `shared/src/templates/build-handler.ts` (inline CORS middleware) —
+  el Lambda aade los headers en cada respuesta, incluyendo errores
+  4xx/5xx (importante para que un error 401 de auth no
+  desencadene un CORS error aparte).
+
+Preflight `OPTIONS` se responde **204** sin pasar al handler.
+Ver `parseCorsAllowedOrigins` y `selectAllowOrigin` exports de
+`build-handler.ts` para la logica de parsing/decision.
 
 ---
 

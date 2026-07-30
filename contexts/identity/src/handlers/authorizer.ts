@@ -46,9 +46,11 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<SimpleAuth
   const authHeader =
     headers.authorization ?? headers.Authorization ?? headers.AUTHORIZATION;
 
+  const path = event.requestContext?.http?.path ?? event.rawPath;
+
   if (!authHeader?.startsWith('Bearer ')) {
     logger.warn('Authorizer: missing or non-Bearer Authorization header', {
-      path: event.requestContext?.path,
+      path,
     });
     return deny();
   }
@@ -59,7 +61,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<SimpleAuth
     const claims = await verifyJwt(token, secret);
     if (typeof claims.sub !== 'string') {
       logger.warn('Authorizer: JWT missing subject claim', {
-        path: event.requestContext?.path,
+        path,
       });
       return deny();
     }
@@ -73,7 +75,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<SimpleAuth
     };
   } catch (err) {
     logger.warn('Authorizer: JWT verify failed', {
-      path: event.requestContext?.path,
+      path,
       error: String(err),
     });
     return deny();
