@@ -6,7 +6,7 @@
 // =============================================================================
 
 import { describe, it, expect, vi } from 'vitest';
-import type { InsertQueryBuilder, Kysely } from 'kysely';
+import type { InsertQueryBuilder, Kysely, SelectQueryBuilder } from 'kysely';
 import { createAuditRepository } from './audit-repository.js';
 import type { Database } from './database.js';
 
@@ -21,6 +21,35 @@ function makeDbWithFailingExecute() {
     }),
   } as unknown as Kysely<Database>;
   return { db, builder };
+}
+
+/** Mock handle that captures the select chain and returns `rows` from execute. */
+function makeDbReturning(rows: ReadonlyArray<Record<string, unknown>>) {
+  const builder = {
+    selectAll: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    execute: vi.fn().mockResolvedValue(rows),
+  } as unknown as SelectQueryBuilder<Database, 'audit_log', unknown>;
+  const db = {
+    withSchema: vi.fn().mockReturnValue({
+      selectFrom: vi.fn().mockReturnValue(builder),
+    }),
+  } as unknown as Kysely<Database>;
+  return { db, builder };
+}
+
+function makeRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: '12345',
+    occurred_at: new Date('2026-07-30T16:00:00Z'),
+    action: 'user.login',
+    actor_user_id: null,
+    subject_user_id: '11111111-1111-4111-8111-111111111111',
+    metadata: { ip: '1.2.3.4', userAgent: 'curl' },
+    ...overrides,
+  };
 }
 
 describe('audit-repository.insert', () => {
@@ -109,13 +138,6 @@ describe('audit-repository.insert', () => {
   });
 
   it('returns the same error message when DB call fails (covers withDbErrorMapping path)', async () => {
-    // The wrapper `withDbErrorMapping` re-throws ApiError instances
-    // unchanged. We assert on the wrapper's output shape (statusCode 503 +
-    // details[0].code 'db.unavailable') rather than on identity, because
-    // Vite's transformer can create distinct ApiError class instances
-    // across the test boundary and the production code path. The
-    // class-identity contract is covered by withDbErrorMapping's own tests
-    // in shared/src/infra/.
     const db = {
       withSchema: vi.fn().mockReturnValue({
         insertInto: vi.fn().mockReturnValue({
@@ -138,5 +160,96 @@ describe('audit-repository.insert', () => {
       code: 'service_unavailable',
       details: [{ code: 'db.unavailable', meta: { operation: 'audit_log.insert' } }],
     });
+  });
+});
+
+describe('audit-repository.list', () => {
+  it('withDb returns a new repository bound to the given handle (list)', () => {
+    const { db } = makeDbReturning([]);
+    const repo = createAuditRepository(db);
+    const rebound = repo.withDb({} as Kysely<Database>);
+    expect(rebound).not.toBe(repo);
+  });
+
+  it('returns { entries, nextCursor: null } when empty', async () => {
+    const { db } = makeDbReturning([]);
+    const repo = createAuditRepository(db);
+    const result = await repo.list({});
+    expect(result.entries).toEqual([]);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it('maps DB rows to domain AuditEntry entries (snake -> camel)', async () => {
+    const when = new Date('2026-07-30T16:00:00Z');
+    const { db } = makeDbReturning([
+      makeRow({
+        id: '100',
+        occurred_at: when,
+        action: 'user.profile_updated',
+        actor_user_id: 'a-uuid',
+        subject_user_id: 's-uuid',
+        metadata: { changedFields: ['age'], old: { age: 30 }, new: { age: 31 } },
+      }),
+    ]);
+    const repo = createAuditRepository(db);
+    const result = await repo.list({});
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toMatchObject({
+      id: '100',
+      action: 'user.profile_updated',
+      actorUserId: 'a-uuid',
+      subjectUserId: 's-uuid',
+      occurredAt: when,
+      metadata: { changedFields: ['age'], old: { age: 30 }, new: { age: 31 } },
+    });
+  });
+
+  it('fetches limit+1 to detect hasMore, returns nextCursor when more', async () => {
+    const rows = Array.from({ length: 51 }, (_, i) => makeRow({ id: String(1000 + i) }));
+    const { db, builder } = makeDbReturning(rows);
+    const repo = createAuditRepository(db);
+    const result = await repo.list({ limit: 50 });
+    expect(result.entries).toHaveLength(50);
+    expect(result.nextCursor).not.toBeNull();
+    const decoded = JSON.parse(
+      Buffer.from(result.nextCursor!, 'base64url').toString('utf8'),
+    );
+    expect(decoded.t).toBe('2026-07-30T16:00:00.000Z');
+    expect(decoded.i).toBe('1049');
+  });
+
+  it('returns nextCursor null when no rows beyond limit', async () => {
+    const rows = Array.from({ length: 10 }, (_, i) => makeRow({ id: String(i) }));
+    const { db } = makeDbReturning(rows);
+    const repo = createAuditRepository(db);
+    const result = await repo.list({ limit: 50 });
+    expect(result.entries).toHaveLength(10);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it('returns empty result when cursor is malformed', async () => {
+    const { db } = makeDbReturning([]);
+    const repo = createAuditRepository(db);
+    const result = await repo.list({ cursor: 'not-base64-junk!' });
+    expect(result.entries).toEqual([]);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it('applies filters + clamps limit to [1, 200]', async () => {
+    const { db, builder } = makeDbReturning([makeRow()]);
+    const repo = createAuditRepository(db);
+    await repo.list({
+      actorUserId: 'a-uuid',
+      subjectUserId: 's-uuid',
+      action: 'user.login',
+      since: '2026-07-30T00:00:00Z',
+      until: '2026-07-31T00:00:00Z',
+      cursor: Buffer.from(
+        JSON.stringify({ t: '2026-07-30T12:00:00Z', i: '500' }),
+      ).toString('base64url'),
+      limit: 25,
+    });
+    expect((builder.where as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect((builder.limit as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(26);
   });
 });
