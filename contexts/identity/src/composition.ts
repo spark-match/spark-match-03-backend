@@ -25,6 +25,7 @@ import {
 } from './infra/user-repository.js';
 import { createAuditRepository, type AuditRepository } from './infra/audit-repository.js';
 import { createUserService, type UserService } from './service/user-service.js';
+import { createAuditService, type AuditService } from './service/audit-service.js';
 import { createJwtSigner, type JwtSigner } from './infra/jwt-signer.js';
 
 const SSM_BUS_ARN_KEY = '/spark-match/eventbridge/bus-arn';
@@ -39,6 +40,7 @@ export interface IdentityContext {
   userRepository: UserRepository;
   auditRepository: AuditRepository;
   userService: UserService;
+  auditService: AuditService;
   jwtSigner: JwtSigner;
   defaultTokenExpiresSeconds: number;
   signForUser(user: { id: string; email: string; role: string }): Promise<string>;
@@ -76,6 +78,10 @@ export async function buildContext(): Promise<IdentityContext> {
       eventPublisher,
     });
 
+    const auditService = createAuditService({
+      auditRepository,
+    });
+
     const built: IdentityContext = {
       logger,
       tracer,
@@ -85,6 +91,7 @@ export async function buildContext(): Promise<IdentityContext> {
       userRepository,
       auditRepository,
       userService,
+      auditService,
       jwtSigner,
       defaultTokenExpiresSeconds: DEFAULT_JWT_EXPIRES_SECONDS,
       async signForUser(user) {
