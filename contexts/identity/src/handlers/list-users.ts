@@ -6,6 +6,7 @@ import { buildContext } from '../composition.js';
 import { toPublicUser, USER_ROLES, type UserRole } from '../domain/user.js';
 import {
   ListUsersInputSchema,
+  ListUsersOutputSchema,
   type ListUsersInput,
   type ListUsersOutput,
 } from '../schemas/list-users.schema.js';
@@ -82,6 +83,7 @@ function toPublicUserDto(user: ReturnType<typeof toPublicUser>): ListUsersOutput
 export const handler = buildHandler<ListUsersInput, ListUsersOutput>({
   name: 'identity-list-users',
   inputSchema: ListUsersInputSchema,
+  outputSchema: ListUsersOutputSchema,
   logger: createLogger('identity-list-users'),
   tracer: new Tracer({ serviceName: 'identity-list-users' }),
   requireAuth: true,
