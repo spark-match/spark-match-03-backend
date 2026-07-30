@@ -61,6 +61,6 @@ export const handler = buildHandler<AuditListInput, AuditListOutput>({
         occurredAt: e.occurredAt!.toISOString(),
       })),
       nextCursor: result.nextCursor,
-    };
+    } as AuditListOutput;
   },
 });
