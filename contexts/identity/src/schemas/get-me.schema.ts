@@ -18,4 +18,3 @@ export const PublicUserSchema = z.object({
 export type PublicUser = z.infer<typeof PublicUserSchema>;
 
 export const GetMeOutputSchema = PublicUserSchema;
-export type GetMeOutput = PublicUser;

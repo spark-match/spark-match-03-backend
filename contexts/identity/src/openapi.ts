@@ -65,6 +65,31 @@ export interface Operation {
   responses: OperationResponse[];
 }
 
+/**
+ * Generic error response envelope. The actual shape is the
+ * `formatError()` output from `shared/src/http/api-error.ts`;
+ * we expose it as a free-form object for OpenAPI consumers.
+ *
+ * We intentionally do NOT use `z.object({}).passthrough()` here
+ * because Zod 4 emits the deprecated `ZodObject<{}, $loose>`
+ * overload that SonarCloud flags as a code smell
+ * (`typescript:S1874`). Using `z.unknown()` is semantically equivalent
+ * here (we don't know what `error.details` will contain) and avoids
+ * the deprecated overload.
+ */
+export const ERROR_RESPONSE_SCHEMA = z.object({
+  success: z.literal(false),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.array(z.unknown()).optional(),
+  }),
+  meta: z.object({
+    requestId: z.string(),
+    timestamp: z.string(),
+  }),
+});
+
 export const IDENTITY_OPERATIONS: Operation[] = [
   {
     method: 'POST',
@@ -76,8 +101,8 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     requestBody: RegisterInputSchema,
     responses: [
       { statusCode: 200, description: 'User created', schema: RegisterOutputSchema },
-      { statusCode: 400, description: 'Validation error', schema: z.object({}).passthrough() },
-      { statusCode: 409, description: 'Email already taken', schema: z.object({}).passthrough() },
+      { statusCode: 400, description: 'Validation error', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 409, description: 'Email already taken', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
   {
@@ -90,8 +115,8 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     requestBody: LoginInputSchema,
     responses: [
       { statusCode: 200, description: 'Authenticated', schema: LoginOutputSchema },
-      { statusCode: 401, description: 'Invalid credentials', schema: z.object({}).passthrough() },
-      { statusCode: 403, description: 'Account deactivated', schema: z.object({}).passthrough() },
+      { statusCode: 401, description: 'Invalid credentials', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 403, description: 'Account deactivated', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
   {
@@ -103,7 +128,7 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     security: 'bearer',
     responses: [
       { statusCode: 200, description: 'Current user profile', schema: GetMeOutputSchema },
-      { statusCode: 401, description: 'Missing/invalid auth', schema: z.object({}).passthrough() },
+      { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
   {
@@ -116,7 +141,7 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     requestBody: UpdateProfileInputSchema,
     responses: [
       { statusCode: 200, description: 'Updated profile', schema: UpdateProfileOutputSchema },
-      { statusCode: 401, description: 'Missing/invalid auth', schema: z.object({}).passthrough() },
+      { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
   {
@@ -129,7 +154,7 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     requestBody: ChangePasswordInputSchema,
     responses: [
       { statusCode: 200, description: 'Password updated', schema: ChangePasswordOutputSchema },
-      { statusCode: 401, description: 'Missing/invalid auth', schema: z.object({}).passthrough() },
+      { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
   {
@@ -167,8 +192,8 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     ],
     responses: [
       { statusCode: 200, description: 'User list', schema: ListUsersOutputSchema },
-      { statusCode: 401, description: 'Missing/invalid auth', schema: z.object({}).passthrough() },
-      { statusCode: 403, description: 'Not admin', schema: z.object({}).passthrough() },
+      { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 403, description: 'Not admin', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
   {
@@ -190,9 +215,9 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     requestBody: UpdateUserInputSchema,
     responses: [
       { statusCode: 200, description: 'Updated user', schema: UpdateUserOutputSchema },
-      { statusCode: 401, description: 'Missing/invalid auth', schema: z.object({}).passthrough() },
-      { statusCode: 403, description: 'Not admin', schema: z.object({}).passthrough() },
-      { statusCode: 404, description: 'User not found', schema: z.object({}).passthrough() },
+      { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 403, description: 'Not admin', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 404, description: 'User not found', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
   {
@@ -212,9 +237,9 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     ],
     responses: [
       { statusCode: 200, description: 'Activated user', schema: ActivateUserOutputSchema },
-      { statusCode: 401, description: 'Missing/invalid auth', schema: z.object({}).passthrough() },
-      { statusCode: 403, description: 'Not admin', schema: z.object({}).passthrough() },
-      { statusCode: 404, description: 'User not found', schema: z.object({}).passthrough() },
+      { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 403, description: 'Not admin', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 404, description: 'User not found', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
   {
@@ -234,15 +259,23 @@ export const IDENTITY_OPERATIONS: Operation[] = [
     ],
     responses: [
       { statusCode: 200, description: 'Deactivated user', schema: DeactivateUserOutputSchema },
-      { statusCode: 401, description: 'Missing/invalid auth', schema: z.object({}).passthrough() },
-      { statusCode: 403, description: 'Self-deactivation or not admin', schema: z.object({}).passthrough() },
-      { statusCode: 404, description: 'User not found', schema: z.object({}).passthrough() },
+      { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 403, description: 'Self-deactivation or not admin', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 404, description: 'User not found', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
 ];
 
 /**
- * Reusable PublicUser schema exposed for OpenAPI consumers that want to
- * reference the same shape across endpoints.
+ * Generic error response envelope. The actual shape is the
+ * `formatError()` output from `shared/src/http/api-error.ts`;
+ * we expose it as a free-form object for OpenAPI consumers.
+ *
+ * We intentionally do NOT use `z.object({}).passthrough()` here
+ * because Zod 4 emits the deprecated `ZodObject<{}, $loose>`
+ * overload that SonarCloud flags as a code smell
+ * (`typescript:S1874`). Using `z.unknown()` is semantically equivalent
+ * here (we don't know what `error.details` will contain) and avoids
+  * the deprecated overload.
  */
-export const PUBLIC_USER_SCHEMA = PublicUserSchema;
+export { PublicUserSchema as PUBLIC_USER_SCHEMA };
