@@ -454,9 +454,14 @@ del cursor en el futuro, versionarlo (`?cursor=v2:...`).
 
 - **Hoy**: pre-1.0. La ruta usa `/v1/` reservado para el primer contrato
   estable. Cambios incompatibles bump a `/v2/`.
-- **No hay** OpenAPI/JSON Schema artifact generado (pendiente — ver
-  ADR-013). Mientras tanto, este doc + los Zod schemas en cdigo son la
-  source of truth.
+- **OpenAPI 3.1 artifact**: [`docs/openapi.json`](./openapi.json)
+  auto-generado desde los schemas Zod. Regenerar con
+  `npm run generate:openapi` tras cualquier cambio de schema en
+  `contexts/identity/src/schemas/*` o en
+  `contexts/identity/src/openapi.ts`. El test
+  `scripts/generate-openapi.test.ts` verifica que el artefacto esté
+  sincronizado. Cada input/output de cada ruta está descrita como JSON
+  Schema draft-07 (compatible con OpenAPI 3.1). Ver [ADR-013 § Decisión](./adr/013-middy-zod-powertools-stack.md).
 
 ---
 
