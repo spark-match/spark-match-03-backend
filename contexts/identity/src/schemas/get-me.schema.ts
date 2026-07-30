@@ -17,4 +17,8 @@ export const PublicUserSchema = z.object({
 });
 export type PublicUser = z.infer<typeof PublicUserSchema>;
 
+// `GetMeOutputSchema` is the same shape as `PublicUserSchema` (the
+// public projection of any user). We re-export it under the per-route
+// name so the OpenAPI generator can document /v1/users/me specifically
+// and the runtime typecheck for the handler stays type-narrow.
 export const GetMeOutputSchema = PublicUserSchema;

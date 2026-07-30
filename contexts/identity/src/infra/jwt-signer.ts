@@ -37,7 +37,6 @@ export function createJwtSigner(options: {
   cacheKey?: string;
 }): JwtSigner {
   const secrets = options.secrets ?? createSecretsReader();
-  const _cacheKey = options.cacheKey ?? options.secretArn;
 
   let cachedSecret: Uint8Array | null = null;
   let pending: Promise<Uint8Array> | null = null;

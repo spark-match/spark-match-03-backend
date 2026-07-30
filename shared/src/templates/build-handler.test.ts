@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
-import { buildHandler } from './build-handler.js';
+import { buildHandler, parseCorsAllowedOrigins, selectAllowOrigin } from './build-handler.js';
 import { z } from 'zod';
 
 const inputSchema = z.object({ name: z.string() });
@@ -152,9 +152,139 @@ describe('buildHandler', () => {
       wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev);
 
-    // The inline CORS middleware's `before` hook sets the response to 204;
-    // verify the headers are applied regardless of which path short-circuits.
+    // With no CORS_ALLOWED_ORIGINS env (and no Origin request header), the
+    // middleware defaults to `*` and returns 204 with the static CORS headers.
     expect(result.headers['Access-Control-Allow-Origin']).toBe('*');
     expect(result.headers['Access-Control-Allow-Methods']).toContain('OPTIONS');
+  });
+});
+
+describe('parseCorsAllowedOrigins', () => {
+  it('returns ["*"] when env is undefined', () => {
+    expect(parseCorsAllowedOrigins(undefined)).toEqual(['*']);
+  });
+  it('returns ["*"] when env is empty string', () => {
+    expect(parseCorsAllowedOrigins('')).toEqual(['*']);
+  });
+  it('splits a comma-separated list and trims', () => {
+    expect(parseCorsAllowedOrigins('a, b ,c')).toEqual(['a', 'b', 'c']);
+  });
+  it('returns ["*"] when the only entries are whitespace', () => {
+    expect(parseCorsAllowedOrigins('  ,  ')).toEqual(['*']);
+  });
+  it('preserves "*" as a single entry', () => {
+    expect(parseCorsAllowedOrigins('*')).toEqual(['*']);
+  });
+});
+
+describe('selectAllowOrigin', () => {
+  it('returns "*" when allowlist is ["*"]', () => {
+    expect(selectAllowOrigin('https://anywhere.example.com', ['*'])).toBe('*');
+  });
+  it('returns "*" when allowlist is empty', () => {
+    expect(selectAllowOrigin('https://x', [])).toBe('*');
+  });
+  it('returns the request origin when it is in the allowlist', () => {
+    expect(
+      selectAllowOrigin('https://app.example.com', [
+        'https://app.example.com',
+        'https://admin.example.com',
+      ]),
+    ).toBe('https://app.example.com');
+  });
+  it('returns null when the request origin is not in the allowlist', () => {
+    expect(
+      selectAllowOrigin('https://evil.example.com', ['https://app.example.com']),
+    ).toBeNull();
+  });
+  it('returns null when no Origin header is sent', () => {
+    expect(
+      selectAllowOrigin(undefined, ['https://app.example.com']),
+    ).toBeNull();
+  });
+});
+
+describe('inline CORS middleware with CORS_ALLOWED_ORIGINS env', () => {
+  function makeEventWithOrigin(origin: string | undefined) {
+    const ev = makeEvent(null);
+    ev.headers = { ...ev.headers, ...(origin ? { origin } : {}) };
+    return ev;
+  }
+
+  let originalCorsEnv: string | undefined;
+  beforeEach(() => {
+    originalCorsEnv = process.env.CORS_ALLOWED_ORIGINS;
+  });
+  afterEach(() => {
+    if (originalCorsEnv === undefined) {
+      delete process.env.CORS_ALLOWED_ORIGINS;
+    } else {
+      process.env.CORS_ALLOWED_ORIGINS = originalCorsEnv;
+    }
+  });
+
+  it('OPTIONS preflight echoes Origin when in allowlist', async () => {
+    process.env.CORS_ALLOWED_ORIGINS = 'https://app.example.com,https://admin.example.com';
+    // Re-import the module so the const picks up the new env value
+    vi.resetModules();
+    const fresh = await import('./build-handler.js');
+    const wrapped = fresh.buildHandler({
+      inputSchema,
+      handler: (async () => ({ ok: true })) as unknown as Parameters<
+        typeof fresh.buildHandler
+      >[0]['handler'],
+      logger,
+      tracer,
+      enableCors: true,
+    });
+    const ev = makeEventWithOrigin('https://app.example.com');
+    ev.requestContext.http.method = 'OPTIONS';
+    const result = (await (
+      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+    )(ev)) as { headers: Record<string, string> };
+    expect(result.headers['Access-Control-Allow-Origin']).toBe('https://app.example.com');
+    expect(result.headers['Vary']).toBe('Origin');
+  });
+
+  it('OPTIONS preflight omits allow-origin when Origin not in allowlist', async () => {
+    process.env.CORS_ALLOWED_ORIGINS = 'https://app.example.com';
+    vi.resetModules();
+    const fresh = await import('./build-handler.js');
+    const wrapped = fresh.buildHandler({
+      inputSchema,
+      handler: (async () => ({ ok: true })) as unknown as Parameters<
+        typeof fresh.buildHandler
+      >[0]['handler'],
+      logger,
+      tracer,
+      enableCors: true,
+    });
+    const ev = makeEventWithOrigin('https://evil.example.com');
+    ev.requestContext.http.method = 'OPTIONS';
+    const result = (await (
+      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+    )(ev)) as { headers: Record<string, string> };
+    expect(result.headers['Access-Control-Allow-Origin']).toBeUndefined();
+  });
+
+  it('non-OPTIONS response echoes Origin when in allowlist', async () => {
+    process.env.CORS_ALLOWED_ORIGINS = 'https://app.example.com';
+    vi.resetModules();
+    const fresh = await import('./build-handler.js');
+    const wrapped = fresh.buildHandler({
+      inputSchema,
+      handler: (async () => ({ ok: true })) as unknown as Parameters<
+        typeof fresh.buildHandler
+      >[0]['handler'],
+      logger,
+      tracer,
+      enableCors: true,
+    });
+    const ev = makeEventWithOrigin('https://app.example.com');
+    const result = (await (
+      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+    )(ev)) as { headers: Record<string, string> };
+    expect(result.headers['Access-Control-Allow-Origin']).toBe('https://app.example.com');
+    expect(result.headers['Vary']).toBe('Origin');
   });
 });
