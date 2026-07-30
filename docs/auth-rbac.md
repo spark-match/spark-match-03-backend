@@ -62,17 +62,24 @@ ninguno escribe audit row.
 Ver [ADR-015](./adr/015-audit-log-writes.md) § "Login audit" para
 ms detalle.
 
-### 1.2 TTL drift (importante)
+### 1.2 TTL drift (resuelto PR-#80)
 
 | Archivo | Valor | Usado? |
 |---|---|---|
-| [`composition.ts:30`](../contexts/identity/src/composition.ts) | `86400` (24 h) | **S** — `signForUser` pasa este valor explcitamente |
-| [`jwt-helpers.ts:33`](../shared/src/auth/jwt-helpers.ts) | `3600` (1 h, default) | **No** — nunca se invoca `signJwt()` sin `expiresInSeconds` |
+| [`shared/src/auth/jwt-helpers.ts`](../shared/src/auth/jwt-helpers.ts) | `DEFAULT_JWT_EXPIRES_SECONDS = 86400` (24 h) | **S** — constante exportada, usada como default de `signJwt()` |
+| [`composition.ts`](../contexts/identity/src/composition.ts) | importa `DEFAULT_JWT_EXPIRES_SECONDS` de `@spark-match/shared/auth` | **S** — `signForUser` lo pasa explícitamente |
 
-El default de 1 h en `jwt-helpers.ts` est **muerto**. Si en el futuro un
-nuevo caller invoca `signJwt()` sin pasar `expiresInSeconds`, recibir
-1 h en lugar de 24 h. **Recomendacin**: alinear el default con
-`DEFAULT_JWT_EXPIRES_SECONDS` o quitarlo.
+**Una sola fuente de verdad**: `DEFAULT_JWT_EXPIRES_SECONDS` (86400)
+vive en `shared/src/auth/jwt-helpers.ts` y se exporta vía
+`@spark-match/shared/auth`. `signJwt()` lo usa como default;
+`composition.ts` lo re-exporta como `defaultTokenExpiresSeconds` y
+lo pasa explícitamente a `signForUser` para que el contrato del
+context sea visible.
+
+> **Histórico (Sprint 1)**: el default de `signJwt()` era 3600 (1h)
+> mientras que `composition.ts` siempre pasaba 86400. El default
+> estaba muerto pero era un foot-gun para futuros callers. PR-#80
+> alineó ambos a 86400 vía la constante compartida.
 
 ---
 
