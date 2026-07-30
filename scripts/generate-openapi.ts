@@ -96,9 +96,7 @@ export interface OpenApiDoc {
 export function buildDoc(): OpenApiDoc {
   const paths: OpenApiDoc['paths'] = {};
   for (const op of IDENTITY_OPERATIONS) {
-    if (!paths[op.path]) {
-      paths[op.path] = {};
-    }
+    paths[op.path] ??= {};
     paths[op.path][op.method.toLowerCase()] = {
       operationId: op.operationId,
       summary: op.summary,
