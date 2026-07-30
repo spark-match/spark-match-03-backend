@@ -191,9 +191,12 @@ attack surface).
 | `EventBridgePutEventsPolicy` | Register, ActivateUser, DeactivateUser, UpdateUser |
 | `SSMParameterReadPolicy` (`spark-match-${Environment}-*`) | Register, Authorizer, Migrate |
 
-> ⚠️ **Known scope issue (Sprint 5 backlog)**: `SecretsManagerReadWritePolicy`
-> grants `Resource: '*'` for Secrets Manager (5 occurrences). Must be scoped
-> to the specific secret ARNs before production. See tracked TODO.
+> ✅ **Scoped (PR-#80)**: cada `SecretsManagerReadWritePolicy` declara
+> `SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'` (o
+> `jwt-arn` para el Authorizer), por lo que el IAM policy desplegado
+> tiene `Resource: <secret ARN>` (no `Resource: '*'`). Los 9 bloques
+> están scopeados. El backlog P2 (Sprint 5) que mencionaba
+> "scope a ARNs específicos" se considera cerrado.
 
 ### 2.5 Source layout (deployed files)
 
