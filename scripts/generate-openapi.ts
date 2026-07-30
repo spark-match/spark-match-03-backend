@@ -167,7 +167,7 @@ function main(): void {
     (acc, methods) => acc + Object.keys(methods).length,
     0,
   );
-  console.log(`Wrote ${outPath} (${pathCount} paths, ${opCount} operations)`);
+  process.stdout.write(`Wrote ${outPath} (${pathCount} paths, ${opCount} operations)\n`);
 }
 
 main();
