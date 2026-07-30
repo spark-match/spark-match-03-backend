@@ -24,6 +24,7 @@ export default defineConfig({
         'shared/src/**/*.ts',
         'contexts/*/src/**/*.ts',
         'events/*/src/**/*.ts',
+        'scripts/**/*.ts',
       ],
       exclude: [
         '**/*.test.ts',

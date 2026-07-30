@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import { IDENTITY_OPERATIONS, ERROR_RESPONSE_SCHEMA } from '../contexts/identity/src/openapi.js';
 import { ListUsersOutputSchema } from '../contexts/identity/src/schemas/index.js';
 import { PublicUserSchema } from '../contexts/identity/src/schemas/get-me.schema.js';
+import { buildDoc, jsonSchemaFor } from './generate-openapi.js';
 
 describe('IDENTITY_OPERATIONS registry', () => {
   it('covers every protected route (defense in depth)', () => {
@@ -75,7 +76,6 @@ describe('docs/openapi.json artifact', () => {
 
 describe('generator internals (branch coverage)', () => {
   it('ERROR_RESPONSE_SCHEMA is a Zod object with the expected envelope fields', () => {
-    // exercises the ERROR_RESPONSE_SCHEMA branch used in every 4xx/5xx response
     const parsed = ERROR_RESPONSE_SCHEMA.parse({
       success: false,
       error: {
@@ -92,7 +92,6 @@ describe('generator internals (branch coverage)', () => {
   });
 
   it('ListUsersOutputSchema parses a valid paginated response', () => {
-    // exercises the ListUsersOutputSchema branch (admin endpoint)
     const payload = ListUsersOutputSchema.parse({
       users: [
         {
@@ -112,7 +111,6 @@ describe('generator internals (branch coverage)', () => {
   });
 
   it('PublicUserSchema accepts null age (per docs/SDD)', () => {
-    // exercises the nullable age branch
     const payload = PublicUserSchema.parse({
       id: '11111111-1111-4111-8111-111111111111',
       email: 'a@b.com',
@@ -127,16 +125,83 @@ describe('generator internals (branch coverage)', () => {
   });
 
   it('IDENTITY_OPERATIONS exercise every response status code (auth/admin/self)', () => {
-    // Snapshot the response schema names referenced; this catches
-    // typos when adding new operations.
     const referencedSchemas = new Set<string>();
     for (const op of IDENTITY_OPERATIONS) {
-      // auth + admin + self operations cover all security levels
       expect(['none', 'bearer', 'admin']).toContain(op.security);
       for (const r of op.responses) {
         referencedSchemas.add(r.constructor.name);
       }
     }
     expect(referencedSchemas.size).toBeGreaterThan(0);
+  });
+
+  it('buildDoc emits OpenAPI 3.1 with paths, operations, security, components', () => {
+    const doc = buildDoc();
+    expect(doc.openapi).toBe('3.1.0');
+    // count operations across all paths (some paths have multiple
+    // methods, e.g. /v1/users/me has GET and PATCH)
+    const totalOps = Object.values(doc.paths).reduce(
+      (acc, methods) => acc + Object.keys(methods).length,
+      0,
+    );
+    expect(totalOps).toBe(IDENTITY_OPERATIONS.length);
+    expect(doc.components.securitySchemes.bearerAuth.scheme).toBe('bearer');
+    expect(doc.components.schemas?.ErrorResponse).toBeDefined();
+  });
+
+  it('buildDoc attaches bearerAuth to bearer + admin operations but not none', () => {
+    const doc = buildDoc();
+    const opById = new Map<string, ReturnType<typeof getOp>>();
+
+    function getOp(p: string, m: string): unknown {
+      const methods = doc.paths[p];
+      return methods?.[m.toLowerCase()];
+    }
+
+    for (const regOp of IDENTITY_OPERATIONS) {
+      const built = getOp(regOp.path, regOp.method) as { security?: unknown[] };
+      expect(built).toBeDefined();
+      if (regOp.security === 'none') {
+        expect(built.security).toBeUndefined();
+      } else {
+        expect(built.security).toEqual([{ bearerAuth: [] }]);
+      }
+    }
+  });
+
+  it('buildDoc paths include parameters, requestBody and responses for every op', () => {
+    // Exercises the parametersFor, requestBodyFor, responsesFor code paths
+    // for all 9 operations across 3 security models (none/bearer/admin).
+    const doc = buildDoc();
+    for (const regOp of IDENTITY_OPERATIONS) {
+      const built = (
+        doc.paths[regOp.path] as Record<string, Record<string, unknown>>
+      )[regOp.method.toLowerCase()];
+      expect(built).toBeDefined();
+      if (regOp.parameters && regOp.parameters.length > 0) {
+        expect(Array.isArray(built.parameters)).toBe(true);
+        expect((built.parameters as unknown[]).length).toBe(regOp.parameters.length);
+      } else {
+        expect(built.parameters).toBeUndefined();
+      }
+      if (regOp.requestBody) {
+        expect(built.requestBody).toBeDefined();
+      } else {
+        expect(built.requestBody).toBeUndefined();
+      }
+      expect(Object.keys(built.responses as object)).toEqual(
+        regOp.responses.map((r) => String(r.statusCode)).sort(),
+      );
+    }
+  });
+
+  it('jsonSchemaFor round-trips a simple object schema', () => {
+    const { z: zns } = require('zod') as typeof import('zod');
+    const out = jsonSchemaFor(zns.object({ name: zns.string() }));
+    expect(out).toMatchObject({
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
+    });
   });
 });
