@@ -15,6 +15,7 @@ import {
   withAwsErrorMapping,
   type SsmReader,
 } from '@spark-match/shared/infra';
+import { DEFAULT_JWT_EXPIRES_SECONDS } from '@spark-match/shared/auth';
 import type { Kysely } from 'kysely';
 import { getDbConnection } from './infra/db-connection.js';
 import {
@@ -28,7 +29,6 @@ import { createJwtSigner, type JwtSigner } from './infra/jwt-signer.js';
 
 const SSM_BUS_ARN_KEY = '/spark-match/eventbridge/bus-arn';
 const SSM_JWT_SECRET_ARN_KEY = '/spark-match/secret/jwt-arn';
-const DEFAULT_JWT_EXPIRES_SECONDS = 86400;
 
 export interface IdentityContext {
   logger: ReturnType<typeof createLogger>;
