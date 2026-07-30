@@ -36,7 +36,6 @@ import {
   ActivateUserOutputSchema,
   DeactivateUserOutputSchema,
 } from './schemas/index.js';
-import { PublicUserSchema } from './schemas/get-me.schema.js';
 
 export interface OperationParameter {
   name: string;
