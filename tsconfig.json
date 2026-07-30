@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true
+  },
+  "include": [
+    "shared/src/**/*.ts",
+    "contexts/*/src/**/*.ts",
+    "events/*/src/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".aws-sam",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}

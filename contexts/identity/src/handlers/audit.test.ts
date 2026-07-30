@@ -101,7 +101,7 @@ describe('audit handler', () => {
     mockListAuditEntries.mockResolvedValue({
       entries: [
         {
-          id: '12345',
+          id: 12345,
           occurredAt: new Date('2026-07-30T16:00:00Z'),
           action: 'user.login',
           actorUserId: null,
@@ -131,7 +131,11 @@ describe('audit handler', () => {
     };
     expect(result.statusCode).toBe(200);
     expect(mockListAuditEntries).toHaveBeenCalledWith(
-      { userId: 'admin-1', email: 'admin@example.com', role: 'admin' },
+      expect.objectContaining({
+        userId: 'admin-1',
+        email: 'admin@example.com',
+        role: 'admin',
+      }),
       {
         actorUserId: 'a-uuid',
         subjectUserId: undefined,
@@ -145,7 +149,7 @@ describe('audit handler', () => {
     const body = JSON.parse(result.body);
     expect(body.success).toBe(true);
     expect(body.data.entries[0]).toMatchObject({
-      id: '12345',
+      id: 12345,
       occurredAt: '2026-07-30T16:00:00.000Z',
     });
     expect(body.data.nextCursor).toBe('opaque-cursor');

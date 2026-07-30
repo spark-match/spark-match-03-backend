@@ -216,7 +216,7 @@ Esto automáticamente te da:
 - ✅ Métricas de invocación, error rate, duración
 - ✅ Validación de input
 - ✅ Error handling estandarizado
-- ✅ CORS configurado
+- ✅ CORS configurable (allowlist via `CorsAllowedOrigins` CF parameter; ver [auth-rbac.md § 5](./auth-rbac.md))
 
 ## 🔗 Dashboards y alarmas (TODO: Fase 11)
 

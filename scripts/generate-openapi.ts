@@ -31,7 +31,6 @@ const __dirname = dirname(__filename);
 export function jsonSchemaFor(schema: z.ZodType): Record<string, unknown> {
   return z.toJSONSchema(schema, {
     target: 'jsonSchema7',
-    removeAdditionalStrategy: 'passthrough',
   }) as Record<string, unknown>;
 }
 
@@ -97,7 +96,9 @@ export function buildDoc(): OpenApiDoc {
   const paths: OpenApiDoc['paths'] = {};
   for (const op of IDENTITY_OPERATIONS) {
     paths[op.path] ??= {};
-    paths[op.path][op.method.toLowerCase()] = {
+    const pathItem = paths[op.path];
+    if (!pathItem) continue;
+    pathItem[op.method.toLowerCase()] = {
       operationId: op.operationId,
       summary: op.summary,
       description: op.description,
@@ -122,7 +123,7 @@ export function buildDoc(): OpenApiDoc {
       { url: 'https://<api-id>.execute-api.<region>.amazonaws.com/staging', description: 'staging' },
       { url: 'https://<api-id>.execute-api.<region>.amazonaws.com/prod', description: 'prod' },
     ],
-    paths,
+    paths: paths ?? {},
     components: {
       securitySchemes: {
         bearerAuth: {
