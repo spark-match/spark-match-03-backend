@@ -67,8 +67,7 @@ export interface Operation {
 
 /**
  * Generic error response envelope. The actual shape is the
- * `formatError()` output from `shared/src/http/api-error.ts`;
- * we expose it as a free-form object for OpenAPI consumers.
+ * `formatError()` output from `shared/src/http/api-error.ts`.
  *
  * We intentionally do NOT use `z.object({}).passthrough()` here
  * because Zod 4 emits the deprecated `ZodObject<{}, $loose>`
@@ -275,7 +274,6 @@ export const IDENTITY_OPERATIONS: Operation[] = [
  * because Zod 4 emits the deprecated `ZodObject<{}, $loose>`
  * overload that SonarCloud flags as a code smell
  * (`typescript:S1874`). Using `z.unknown()` is semantically equivalent
- * here (we don't know what `error.details` will contain) and avoids
+  * here (we don't know what `error.details` will contain) and avoids
   * the deprecated overload.
  */
-export { PublicUserSchema as PUBLIC_USER_SCHEMA };
