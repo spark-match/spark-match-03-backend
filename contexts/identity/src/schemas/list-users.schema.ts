@@ -1,19 +1,18 @@
 import { z } from 'zod';
+import { PublicUserSchema } from './get-me.schema.js';
 
-export const ListUsersInputSchema = z.object({});
-
+export const ListUsersInputSchema = z.object({
+  query: z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    cursor: z.string().optional(),
+    active: z.enum(['true', 'false', 'all']).optional(),
+    role: z.enum(['admin']).optional(),
+  }).optional(),
+});
 export type ListUsersInput = z.infer<typeof ListUsersInputSchema>;
 
-export interface ListUsersOutput {
-  users: Array<{
-    id: string;
-    email: string;
-    fullName: string;
-    age: number | null;
-    role: string;
-    active: boolean;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-  nextCursor: string | null;
-}
+export const ListUsersOutputSchema = z.object({
+  users: z.array(PublicUserSchema),
+  nextCursor: z.string().nullable(),
+});
+export type ListUsersOutput = z.infer<typeof ListUsersOutputSchema>;
