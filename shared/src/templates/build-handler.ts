@@ -72,8 +72,13 @@ function parseBody(body: unknown): unknown {
   return body;
 }
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+/**
+ * Static CORS headers. The `Access-Control-Allow-Origin` header is
+ * dynamic (depends on the request's `Origin` and the allowlist), so
+ * the per-request middleware computes it via `selectAllowOrigin()`
+ * and merges the rest from this constant.
+ */
+const CORS_STATIC_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Correlation-Id',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   'Access-Control-Expose-Headers': 'X-Correlation-Id',
@@ -83,10 +88,60 @@ const CORS_HEADERS = {
 } as const;
 
 /**
+ * Parse the `CORS_ALLOWED_ORIGINS` env var (comma-separated) into an
+ * array of trimmed, non-empty origins. `*` and an unset/empty value
+ * both produce `['*']` (any origin). Trimmed for resilience against
+ * deploy-time whitespace.
+ */
+export function parseCorsAllowedOrigins(env: string | undefined): string[] {
+  if (!env) return ['*'];
+  const parts = env
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0);
+  if (parts.length === 0) return ['*'];
+  return parts;
+}
+
+/**
+ * Pick the `Access-Control-Allow-Origin` value for a given request
+ * `Origin` header:
+ *  - If the allowlist is `['*']`, return `*` (any origin).
+ *  - Else if the request's `Origin` is in the allowlist, echo it back.
+ *  - Else return `null` (caller MUST omit the header so the browser
+ *    blocks the response).
+ */
+export function selectAllowOrigin(
+  requestOrigin: string | undefined,
+  allowedOrigins: string[],
+): string | null {
+  if (allowedOrigins.length === 0 || allowedOrigins.includes('*')) {
+    return '*';
+  }
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    return requestOrigin;
+  }
+  return null;
+}
+
+/**
+ * Read CORS configuration from the Lambda environment. Cached at module
+ * load so the middleware doesn't re-parse on every request.
+ */
+const CORS_ALLOWED_ORIGINS = parseCorsAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS);
+
+/**
  * Inline CORS middleware. Avoids the @middy/http-cors middleware because
- * the spark-match backend uses a fixed "*" origin (SSM-driven origins
- * are a follow-up). The inline middleware applies CORS headers to all
- * responses and short-circuits OPTIONS preflight requests.
+ * the spark-match backend needs:
+ *  - dynamic `Access-Control-Allow-Origin` (echo request `Origin` if
+ *    allowlisted) for prod hardening — `@middy/http-cors` doesn't
+ *    support allowlist semantics without extra config
+ *  - to also apply CORS headers on `onError` paths so 4xx/5xx
+ *    responses don't leak CORS failures
+ *
+ * The allowlist is sourced from `CORS_ALLOWED_ORIGINS` (env var), set
+ * by the `CorsAllowedOrigins` CloudFormation parameter on the root
+ * stack and propagated to every Lambda's `Environment` block.
  */
 function inlineCorsMiddleware(): middy.MiddlewareObj<
   APIGatewayProxyEventV2,
@@ -96,7 +151,15 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
     if (request.response === undefined || request.response === null) return;
     const resp = asResponse(request.response);
     const headers = (resp.headers ?? {}) as Record<string, string>;
-    for (const [k, v] of Object.entries(CORS_HEADERS)) {
+    // Compute the dynamic allow-origin from the request's Origin header
+    const requestOrigin = request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
+    const allowOrigin = selectAllowOrigin(requestOrigin, CORS_ALLOWED_ORIGINS);
+    if (allowOrigin !== null) {
+      // `??=` so a handler-set header is preserved
+      headers['Access-Control-Allow-Origin'] ??= allowOrigin;
+      headers['Vary'] = 'Origin';
+    }
+    for (const [k, v] of Object.entries(CORS_STATIC_HEADERS)) {
       headers[k] ??= v;
     }
     resp.headers = headers;
@@ -105,9 +168,20 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
     before: async (request) => {
       const method = request.event.requestContext?.http?.method;
       if (method === 'OPTIONS') {
+        // Preflight: compute allow-origin from request's Origin header
+        const requestOrigin = request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
+        const allowOrigin = selectAllowOrigin(requestOrigin, CORS_ALLOWED_ORIGINS);
+        const preflightHeaders: Record<string, string> = {};
+        if (allowOrigin !== null) {
+          preflightHeaders['Access-Control-Allow-Origin'] = allowOrigin;
+          preflightHeaders['Vary'] = 'Origin';
+        }
+        for (const [k, v] of Object.entries(CORS_STATIC_HEADERS)) {
+          preflightHeaders[k] = v;
+        }
         request.response = {
           statusCode: 204,
-          headers: { ...CORS_HEADERS },
+          headers: preflightHeaders,
           body: '',
         } as unknown as APIGatewayProxyResultV2;
       }

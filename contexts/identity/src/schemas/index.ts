@@ -40,10 +40,7 @@ export {
   type ListUsersOutput,
 } from './list-users.schema.js';
 
-export {
-  GetMeOutputSchema,
-  type GetMeOutput,
-} from './get-me.schema.js';
+export { GetMeOutputSchema, type PublicUser } from './get-me.schema.js';
 
 export {
   UpdateUserInputSchema,

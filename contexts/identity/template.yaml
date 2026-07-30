@@ -39,6 +39,7 @@ Globals:
         ENVIRONMENT: !Ref Environment
         EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
         DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
+        CORS_ALLOWED_ORIGINS: !Join [',', !Ref CorsAllowedOrigins]
         JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
         # Node 24 no longer auto-loads Amazon CA certificates. The RDS CA
         # bundle is shipped via the layer; point Node at it before opening

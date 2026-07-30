@@ -47,7 +47,7 @@ export interface AuditRepository {
 }
 
 interface AuditRow {
-  id: string;
+  id: number;
   occurred_at: Date;
   action: string;
   actor_user_id: string | null;
@@ -67,17 +67,17 @@ function mapRowToEntry(row: AuditRow): AuditEntry {
 }
 
 /** Encode cursor as base64(JSON({occurredAt, id})) so the format is opaque to clients. */
-function encodeCursor(occurredAt: Date, id: string): string {
+function encodeCursor(occurredAt: Date, id: number): string {
   const payload = JSON.stringify({ t: occurredAt.toISOString(), i: id });
   return Buffer.from(payload, 'utf8').toString('base64url');
 }
 
 /** Decode and validate cursor. Returns null on malformed input. */
-function decodeCursor(cursor: string): { occurredAt: Date; id: string } | null {
+function decodeCursor(cursor: string): { occurredAt: Date; id: number } | null {
   try {
     const json = Buffer.from(cursor, 'base64url').toString('utf8');
     const parsed = JSON.parse(json) as { t?: unknown; i?: unknown };
-    if (typeof parsed.t !== 'string' || typeof parsed.i !== 'string') return null;
+    if (typeof parsed.t !== 'string' || typeof parsed.i !== 'number') return null;
     const occurredAt = new Date(parsed.t);
     if (Number.isNaN(occurredAt.getTime())) return null;
     return { occurredAt, id: parsed.i };
@@ -147,7 +147,7 @@ export function createAuditRepository(
           if (!decoded) {
             return { entries: [], nextCursor: null };
           }
-          query = query.where(({ eb, fn }) =>
+          query = query.where(({ eb }) =>
             eb.or([
               eb('occurred_at', '<', decoded.occurredAt),
               eb.and([eb('occurred_at', '=', decoded.occurredAt), eb('id', '<', decoded.id)]),
