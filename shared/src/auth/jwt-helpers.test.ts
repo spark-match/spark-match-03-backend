@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { signJwt, verifyJwt } from './jwt-helpers.js';
+import { signJwt, verifyJwt, DEFAULT_JWT_EXPIRES_SECONDS } from './jwt-helpers.js';
 import { ApiError } from '../http/api-error.js';
 
 const SECRET = new TextEncoder().encode('a'.repeat(32)); // 32-byte HS256 secret
@@ -30,6 +30,17 @@ describe('signJwt', () => {
     });
     const claims = await verifyJwt(token, SECRET);
     expect(claims.exp! - claims.iat!).toBe(60);
+  });
+
+  it('defaults to DEFAULT_JWT_EXPIRES_SECONDS (24h) when expiresInSeconds is omitted', async () => {
+    expect(DEFAULT_JWT_EXPIRES_SECONDS).toBe(86400);
+    const token = await signJwt(SECRET, {
+      subject: 'u-1',
+      email: 'a@b.com',
+      role: 'admin',
+    });
+    const claims = await verifyJwt(token, SECRET);
+    expect(claims.exp! - claims.iat!).toBe(86400);
   });
 });
 
