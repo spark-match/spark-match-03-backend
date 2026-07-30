@@ -35,6 +35,8 @@ import {
   ListUsersOutputSchema,
   ActivateUserOutputSchema,
   DeactivateUserOutputSchema,
+  AuditListInputSchema,
+  AuditListOutputSchema,
 } from './schemas/index.js';
 
 export interface OperationParameter {
@@ -260,6 +262,29 @@ export const IDENTITY_OPERATIONS: Operation[] = [
       { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
       { statusCode: 403, description: 'Self-deactivation or not admin', schema: ERROR_RESPONSE_SCHEMA },
       { statusCode: 404, description: 'User not found', schema: ERROR_RESPONSE_SCHEMA },
+    ],
+  },
+  {
+    method: 'GET',
+    path: '/v1/audit',
+    operationId: 'listAuditEntries',
+    summary: 'Admin-only: list audit log entries with filters + cursor pagination.',
+    tags: ['Admin'],
+    security: 'admin',
+    parameters: [
+      { name: 'cursor', in: 'query', schema: z.string(), description: 'Opaque pagination cursor (returned by previous call).' },
+      { name: 'limit', in: 'query', schema: z.coerce.number().int().min(1).max(200), description: 'Page size (default 50, max 200).' },
+      { name: 'actorUserId', in: 'query', schema: z.uuid(), description: 'Filter by the user who performed the action.' },
+      { name: 'subjectUserId', in: 'query', schema: z.uuid(), description: 'Filter by the target user of the action.' },
+      { name: 'action', in: 'query', schema: z.string(), description: 'Filter by event action (e.g. "user.login").' },
+      { name: 'since', in: 'query', schema: z.iso.datetime(), description: 'Inclusive lower bound on occurredAt.' },
+      { name: 'until', in: 'query', schema: z.iso.datetime(), description: 'Inclusive upper bound on occurredAt.' },
+    ],
+    requestBody: AuditListInputSchema.shape.query,
+    responses: [
+      { statusCode: 200, description: 'Paginated audit entries', schema: AuditListOutputSchema },
+      { statusCode: 401, description: 'Missing/invalid auth', schema: ERROR_RESPONSE_SCHEMA },
+      { statusCode: 403, description: 'Not admin (audit-only)', schema: ERROR_RESPONSE_SCHEMA },
     ],
   },
 ];
