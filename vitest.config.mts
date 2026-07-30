@@ -14,6 +14,7 @@ export default defineConfig({
       'shared/src/**/*.test.ts',
       'contexts/**/*.test.ts',
       'events/**/*.test.ts',
+      'scripts/**/*.test.ts',
       'tests/**/*.test.ts',
     ],
     coverage: {
@@ -23,6 +24,7 @@ export default defineConfig({
         'shared/src/**/*.ts',
         'contexts/*/src/**/*.ts',
         'events/*/src/**/*.ts',
+        'scripts/**/*.ts',
       ],
       exclude: [
         '**/*.test.ts',

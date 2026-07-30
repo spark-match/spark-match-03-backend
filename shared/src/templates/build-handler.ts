@@ -39,6 +39,13 @@ export interface HandlerConfig<TInput, TOutput> {
   name?: string;
   /** Zod schema for request body validation. */
   inputSchema: ZodType;
+  /**
+   * Optional Zod schema for the response payload. Not used at runtime
+   * (responses are not re-validated today), but exposed for the OpenAPI
+   * generator (`scripts/generate-openapi.ts`) to emit per-endpoint output
+   * schemas. Mirrors `inputSchema` semantically; see ADR-013.
+   */
+  outputSchema?: ZodType;
   /** The business logic. */
   handler: Handler<TInput, TOutput>;
   /** Logger instance (per-context). */
