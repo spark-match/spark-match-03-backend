@@ -14,6 +14,16 @@
 import { jwtVerify, SignJWT, type JWTPayload } from 'jose';
 import { ApiError } from '../http/api-error.js';
 
+/**
+ * Default JWT lifetime (24 hours).
+ *
+ * Exported so callers (e.g. `composition.ts`) can reference the same
+ * value rather than re-define it. PR-#80 (Sprint 3 P3 close-out)
+ * removed the prior 1h default in `signJwt()` to prevent accidental
+ * 1h tokens if a new caller forgets to pass `expiresInSeconds`.
+ */
+export const DEFAULT_JWT_EXPIRES_SECONDS = 86400;
+
 export interface SparkMatchJwtClaims extends JWTPayload {
   sub: string;
   email: string;
@@ -29,7 +39,7 @@ export interface SignOptions {
   email: string;
   /** User role (e.g. 'admin'). */
   role: string;
-  /** Token lifetime in seconds. Default: 3600 (1 hour). */
+  /** Token lifetime in seconds. Default: `DEFAULT_JWT_EXPIRES_SECONDS` (24h). */
   expiresInSeconds?: number;
   /** Additional JWT claims to embed. */
   extraClaims?: Record<string, unknown>;
@@ -45,7 +55,7 @@ export async function signJwt(secret: Uint8Array, options: SignOptions): Promise
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const exp = now + (options.expiresInSeconds ?? 3600);
+  const exp = now + (options.expiresInSeconds ?? DEFAULT_JWT_EXPIRES_SECONDS);
 
   return new SignJWT({
     email: options.email,
