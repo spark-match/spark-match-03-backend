@@ -164,7 +164,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/me
             Method: GET
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -213,7 +214,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/me/password
             Method: PUT
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -237,7 +239,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users
             Method: GET
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -261,7 +264,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/{userId}/activate
             Method: POST
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -287,7 +291,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/{userId}/deactivate
             Method: POST
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -313,7 +318,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/{userId}
             Method: PATCH
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
