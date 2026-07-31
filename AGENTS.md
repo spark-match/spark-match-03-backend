@@ -69,23 +69,21 @@ The hooks are POSIX shell scripts. They fire correctly via **Git Bash**. On Wind
 - **`ApiError` has TWO code fields.** `err.code` is the transport-level code (e.g. `service_unavailable`); `err.details[0].code` is the AWS-specific code (e.g. `aws.unavailable`). Match both in tests via `toMatchObject`.
 - **`void` on a primitive (not a Promise) is a CRITICAL smell** (`S3735`). Use TypeScript underscore prefix `_varName` for intentionally unused vars.
 
-## Path aliases (`@spark-match/shared/*`) — read before editing tests
+## Path aliases (`@spark-match/shared/*`)
 
-The workspace alias `@spark-match/shared/*` resolves via two independent mechanisms:
+The workspace alias `@spark-match/shared/*` resolves via **`vite-tsconfig-paths`** (npm devDep, v6.1.1+) — a Vitest/Vite plugin that walks the directory tree and reads the `paths` from the nearest `tsconfig.json` for each module. This works on local Windows **and** the Linux CI runner.
 
-1. **TypeScript / IDE**: per-context `tsconfig.json` declares `paths` (e.g. `contexts/identity/tsconfig.json` → `../../shared/src/*`). Works everywhere.
-2. **Vite / vitest at runtime**: relies on the workspace symlink (`node_modules/@spark-match/shared` → `shared/`) + the package's `exports` map. Works on local Windows; the Linux CI runner can fail with `Cannot find package '@spark-match/shared/...'` for test files that import the alias directly.
+**Per-context tsconfig** (`contexts/identity/tsconfig.json`) declares `paths` → `../../shared/src/*` **and** includes `tests/**/*` so the plugin processes imports from test files too. The root `tsconfig.json` (used by `npm run typecheck`) still excludes tests, so typecheck behavior is unchanged.
 
 **Rules of thumb:**
 
 - **Production code** (`*.ts` under `src/`) should always use the alias — it does, by policy.
-- **Test files** under `contexts/<ctx>/src/handlers/*.test.ts` (colocated with production code) can use the alias in `vi.mock(...)` calls because vitest resolves the alias through production-side imports. `contexts/identity/src/infra/jwt-signer.test.ts` is the reference pattern.
-- **Test files** under `contexts/<ctx>/tests/*.test.ts` (integration tests) currently use deep relative paths (`../../../shared/src/auth/index.js`) **on purpose**. Migrating them to the alias works locally but breaks the Linux CI runner unless we adopt `vite-tsconfig-paths` (a new dependency — out of scope per the "Adding new dependencies" rule below). Leave deep paths in those files until we adopt that plugin.
-- **`vi.mock()` deep paths inside `contexts/identity/src/handlers/authorizer.test.ts`** (`'../../../../shared/src/auth/jwt-helpers'` etc.) are **intentional**. Vitest's mock resolution keys on the *resolved module* of the barrel's re-export, not the alias form used at the import site. Replacing them with `'@spark-match/shared/auth/jwt-helpers'` was verified to break the mock interception (the test falls through to the real SecretsManager call). If the `shared` package ever ships subpath `exports`, this can be revisited.
+- **Test files** in any location (`contexts/<ctx>/src/`, `contexts/<ctx>/tests/`, `shared/src/`) should use the alias. The plugin handles resolution uniformly.
+- **`vi.mock()` deep paths inside `contexts/identity/src/handlers/authorizer.test.ts`** (`'../../../../shared/src/auth/jwt-helpers'` etc.) are the **one** exception. They are **intentional** — vitest's mock resolution keys on the *resolved module* of the barrel's re-export, not the alias form used at the import site. Replacing them with `'@spark-match/shared/auth/jwt-helpers'` was verified to break the mock interception (the test falls through to the real SecretsManager call). If the `shared` package ever ships subpath `exports`, this can be revisited.
 
 ### Verifying a path-alias change
 
-Before pushing any change that touches alias imports/exports, run the suite locally and **also** verify by reading `npm run test:coverage` output that no test file is silently skipped due to `ERR_MODULE_NOT_FOUND`. CI is the source of truth.
+Before pushing any change that touches alias imports/exports, run the suite locally **and** read the `npm run test:coverage` output to confirm no test file is silently skipped due to `ERR_MODULE_NOT_FOUND`. CI (Linux runner) is the source of truth.
 
 ## Repo layout
 
@@ -144,4 +142,4 @@ vitest.config.mts                 # Coverage thresholds (80/80/80/80)
 - Sibling repos in the platform: [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/) (Python AI Advisor), [`spark-match-01-devops`](../spark-match-01-devops/) (shared CI recipes), [`spark-match-02-infrastructure`](../spark-match-02-infrastructure/) (Terraform infra).
 - Sprint history:
   - **Sprint 1** (2026-07-28, hygiene + discoverability): PR #55 Dependabot, PR #57 README badges, PR #58 vitest thresholds, PR #59 ADR migration.
-  - **Sprint 3 P3 close-out** (2026-07-30): PR #79 + #80 authorizer wiring, PR #81 + #82 TTL/IAM, PR #83 + #84 OpenAPI from Zod, PR #85 + #86 `GET /v1/audit` admin, PR #87 + #88 CORS allowlist + typecheck tsconfig. PR #89 closed; the path-aliases-on-Linux-CI issue was documented in the section above instead of code-changed (would require a new dep, out of scope).
+  - **Sprint 3 P3 close-out** (2026-07-30): PR #79 + #80 authorizer wiring, PR #81 + #82 TTL/IAM, PR #83 + #84 OpenAPI from Zod, PR #85 + #86 `GET /v1/audit` admin, PR #87 + #88 CORS allowlist + typecheck tsconfig. PR #89 closed (documented B8); PR #90 merged B8 docs. **B8 fully closed** (2026-07-31): `vite-tsconfig-paths` adopted, deep paths in `contexts/identity/tests/*.test.ts` migrated to alias — see `Path aliases` section above.
