@@ -25,6 +25,8 @@
 | [ADR-014](adr/014-observability-with-powertools-not-otel.md) | Observabilidad con Powertools (NO OpenTelemetry) | Aceptado | 2026-07-06 |
 | [ADR-015](adr/015-audit-log-writes.md) | Audit-log writes (sync, in-transaction) para todas las mutaciones + reads de `users` | Aceptado | 2026-07-29 |
 | [ADR-016](adr/016-migrations-dry-run-ci.md) | `migrations-dry-run` CI job (sequence validation via devops reusable workflow) | Aceptado | 2026-07-29 |
+| [ADR-017](adr/017-notifications-architecture.md) | Arquitectura del bounded context Notifications (2026): EventBridge → SQS FIFO → worker idempotente → SES (Fase 1) + EUM Social WhatsApp (Fase 2) | **Propuesto** | 2026-07-30 |
+| [ADR-018](adr/018-throttling-strategy.md) | Throttling strategy (3 capas: API Gateway coarse + WAF deferrable + app-level per-user lockout) | **Propuesto** | 2026-07-31 |
 
 ## How to add a new ADR
 

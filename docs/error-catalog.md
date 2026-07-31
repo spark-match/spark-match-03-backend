@@ -177,7 +177,8 @@ Reservados para uso futuro; no se emiten en respuestas hoy:
 | Cdigo | HTTP | Planeado para |
 |---|---|---|
 | `unprocessable_entity` | 422 | Validaciones de negocio ms all de Zod (ej. reglas cross-field) |
-| `too_many_requests` | 429 | Rate limiting (futuro) |
+| `too_many_requests` | 429 | Rate limiting (futuro). Ver [ADR-018](adr/018-throttling-strategy.md). |
+| `locked` | 423 | Account lockout (Layer 3 del throttling strategy). Ver [ADR-018](adr/018-throttling-strategy.md). |
 
 ---
 
