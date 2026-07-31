@@ -62,17 +62,24 @@ ninguno escribe audit row.
 Ver [ADR-015](./adr/015-audit-log-writes.md) § "Login audit" para
 ms detalle.
 
-### 1.2 TTL drift (importante)
+### 1.2 TTL drift (resuelto PR-#80)
 
 | Archivo | Valor | Usado? |
 |---|---|---|
-| [`composition.ts:30`](../contexts/identity/src/composition.ts) | `86400` (24 h) | **S** — `signForUser` pasa este valor explcitamente |
-| [`jwt-helpers.ts:33`](../shared/src/auth/jwt-helpers.ts) | `3600` (1 h, default) | **No** — nunca se invoca `signJwt()` sin `expiresInSeconds` |
+| [`shared/src/auth/jwt-helpers.ts`](../shared/src/auth/jwt-helpers.ts) | `DEFAULT_JWT_EXPIRES_SECONDS = 86400` (24 h) | **S** — constante exportada, usada como default de `signJwt()` |
+| [`composition.ts`](../contexts/identity/src/composition.ts) | importa `DEFAULT_JWT_EXPIRES_SECONDS` de `@spark-match/shared/auth` | **S** — `signForUser` lo pasa explícitamente |
 
-El default de 1 h en `jwt-helpers.ts` est **muerto**. Si en el futuro un
-nuevo caller invoca `signJwt()` sin pasar `expiresInSeconds`, recibir
-1 h en lugar de 24 h. **Recomendacin**: alinear el default con
-`DEFAULT_JWT_EXPIRES_SECONDS` o quitarlo.
+**Una sola fuente de verdad**: `DEFAULT_JWT_EXPIRES_SECONDS` (86400)
+vive en `shared/src/auth/jwt-helpers.ts` y se exporta vía
+`@spark-match/shared/auth`. `signJwt()` lo usa como default;
+`composition.ts` lo re-exporta como `defaultTokenExpiresSeconds` y
+lo pasa explícitamente a `signForUser` para que el contrato del
+context sea visible.
+
+> **Histórico (Sprint 1)**: el default de `signJwt()` era 3600 (1h)
+> mientras que `composition.ts` siempre pasaba 86400. El default
+> estaba muerto pero era un foot-gun para futuros callers. PR-#80
+> alineó ambos a 86400 vía la constante compartida.
 
 ---
 
@@ -182,23 +189,36 @@ Las reglas viven en
 | `deactivateUser` self-rule: no puede desactivarse | `user-service.ts:243-245` | |
 | `listUsers` admin-only | `user-service.ts:284-286` | |
 
-### 3.2 ⚠️ Inconsistencia Authorizer
+### 3.2 ✅ Authorizer wiring (resuelto Sprint 3)
 
-**Estado**: solo 1 de 8 rutas protegidas invoca `IdentityAuthorizer` en
-API Gateway. Las otras dependen del middleware `requireAuth` en el
-handler. **Esto funciona** (defense in depth) pero:
+**Estado actual (2026-07-30, PR-#79)**: las **7 rutas protegidas**
+están wireadas al `IdentityAuthorizer` en API Gateway:
 
-- El Authorizer Lambda corre 1/8 de las veces.
-- En `sam local invoke` (sin API Gateway) **todas** las rutas dependen
-  del middleware → hay que mockear el Authorizer context o el Bearer
-  fallback (ver `requireAuth()` en
-  [`shared/src/auth/require-auth.ts`](../shared/src/auth/require-auth.ts)).
-- Tests E2E futuros requieren API Gateway real para validar el flujo
-  completo.
+| Ruta | Authorizer |
+|---|---|
+| `GET /v1/users/me` | ✅ `!Ref IdentityAuthorizer` |
+| `PATCH /v1/users/me` | ✅ `!Ref IdentityAuthorizer` |
+| `PUT /v1/users/me/password` | ✅ `!Ref IdentityAuthorizer` |
+| `GET /v1/users` | ✅ `!Ref IdentityAuthorizer` |
+| `PATCH /v1/users/{userId}` | ✅ `!Ref IdentityAuthorizer` |
+| `POST /v1/users/{userId}/activate` | ✅ `!Ref IdentityAuthorizer` |
+| `POST /v1/users/{userId}/deactivate` | ✅ `!Ref IdentityAuthorizer` |
 
-**Plan (Sprint 3)**: wirear las 8 rutas restantes al Authorizer.
-Deprecacin del middleware `requireAuth` para rutas protegidas. Ver
-`RUNTIME-TOPOLOGY.md § 3.1`.
+Las 2 rutas públicas (sin Authorizer, esperadas):
+
+| Ruta | Auth |
+|---|---|
+| `POST /v1/auth/register` | público |
+| `POST /v1/auth/login` | público |
+
+**Defense in depth**: el middleware `requireAuth` permanece como
+fallback (Bearer header) en todos los handlers protegidos. Esto cubre
+el caso `sam local invoke` (sin API Gateway) y tests E2E que no
+montan el Authorizer.
+
+> **Histórico**: antes de PR-#79, 1/8 rutas usaba Authorizer y 7/8
+> dependían exclusivamente del middleware. Defense in depth funcionaba
+> pero el Authorizer Lambda corría solo 12% de las veces.
 
 ---
 
@@ -235,25 +255,48 @@ en propagarse a todos los Lambdas.
 
 ---
 
-## 5. CORS y `Access-Control-Allow-Origin: '*'`
+## 5. CORS configurable (allowlist)
 
-`template.yaml:73-90` configura CORS con `AllowOrigins: '*'`. Esto es
-**intencional para dev** pero **debe tightening antes de prod**:
+Configurado via el parametro CloudFormation `CorsAllowedOrigins`
+(`template.yaml`). Es `CommaDelimitedList` — el backend lo parsea y
+lo pasa a cada Lambda como env var `CORS_ALLOWED_ORIGINS`.
 
-- Dev: `*` (acepta cualquier origen).
-- Prod: dominios especficos via custom domain + WAF rules.
+| Entorno | Valor recomendado |
+|---|---|
+| dev | `CorsAllowedOrigins='*'` (default) |
+| staging | `CorsAllowedOrigins='https://staging.example.com'` |
+| prod | `CorsAllowedOrigins='https://app.example.com,https://admin.example.com'` |
 
-**Header sent** en cada respuesta:
+**Comportamiento del allowlist**:
+
+- Si el allowlist es `*` (o la env var est unset), el middleware
+  responde con `Access-Control-Allow-Origin: *` (modo dev).
+- Si el allowlist es una lista explcita, el middleware **echoea
+  el `Origin` header del request** cuando est en la lista, y
+  **omite** el header cuando no est. El browser bloquea la
+  respuesta en el segundo caso.
+
+**Header set en cada respuesta** (cuando aplica):
 
 ```
-Access-Control-Allow-Origin: *
+Access-Control-Allow-Origin: <origin-allowlisted>
+Vary: Origin
 Access-Control-Allow-Headers: Content-Type, Authorization, X-Correlation-Id
 Access-Control-Allow-Methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
 Access-Control-Expose-Headers: X-Correlation-Id
 ```
 
-Preflight `OPTIONS` se responde **204** sin pasar al handler (ver
-[`build-handler.ts:97-107`](../shared/src/templates/build-handler.ts)).
+**Implementado en 2 capas** (defense in depth):
+- `template.yaml` (HttpApi `CorsConfiguration.AllowOrigins`) — el
+  API Gateway valida antes de invocar el Lambda.
+- `shared/src/templates/build-handler.ts` (inline CORS middleware) —
+  el Lambda aade los headers en cada respuesta, incluyendo errores
+  4xx/5xx (importante para que un error 401 de auth no
+  desencadene un CORS error aparte).
+
+Preflight `OPTIONS` se responde **204** sin pasar al handler.
+Ver `parseCorsAllowedOrigins` y `selectAllowOrigin` exports de
+`build-handler.ts` para la logica de parsing/decision.
 
 ---
 

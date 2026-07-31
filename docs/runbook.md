@@ -374,7 +374,7 @@ aws pi describe-query-statistics \
 | Custom Lambda Permission `SourceArn` check | P3 | Sprint 2 #5 |
 | Aurora CA bundle in `node-runtime` layer | P2 | `build.sh` debe copiar `rds-ca-bundle.pem` al path `/var/task/certificates/rds.pem` esperado por `NODE_EXTRA_CA_CERTS` |
 | IAM `SecretsManagerReadWrite` `Resource: '*'` (5 occ.) | P2 | Sprint 5 — scope a ARNs especficos |
-| CORS `AllowOrigins: '*'` en prod | P2 | Sprint 5 — custom domain + WAF |
+| CORS `AllowOrigins: '*'` en prod | ~~P2~~ | ✅ Cerrado en PR-#87 (Sprint 3). El parametro CF `CorsAllowedOrigins` es configurable (default `*`); el handler echoa `Origin` cuando est en el allowlist. |
 | JWT TTL drift (jwt-helpers default 3600 vs composition 86400) | P3 | Alinear defaults |
 | `audit_log` UPDATE/DELETE permission | P2 | compliance: `REVOKE UPDATE, DELETE ON identity.audit_log FROM <app_role>` |
 | `audit_log` retention policy | P2 | Partition por mes + archive a S3 (crecimiento indefinido) |

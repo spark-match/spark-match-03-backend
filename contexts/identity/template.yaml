@@ -39,6 +39,7 @@ Globals:
         ENVIRONMENT: !Ref Environment
         EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
         DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
+        CORS_ALLOWED_ORIGINS: !Join [',', !Ref CorsAllowedOrigins]
         JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
         # Node 24 no longer auto-loads Amazon CA certificates. The RDS CA
         # bundle is shipped via the layer; point Node at it before opening
@@ -164,7 +165,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/me
             Method: GET
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -213,7 +215,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/me/password
             Method: PUT
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -237,7 +240,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users
             Method: GET
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -261,7 +265,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/{userId}/activate
             Method: POST
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -287,7 +292,8 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/{userId}/deactivate
             Method: POST
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -313,7 +319,17 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/users/{userId}
             Method: PATCH
-            Authorizer: NONE
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
+
+        AuditApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiId
+            Path: /v1/audit
+            Method: GET
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -410,6 +426,37 @@ Resources:
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
+  # ===========================================================================
+  # IdentityAuditFunction - GET /v1/audit (admin only)
+  # ===========================================================================
+  # Lists identity.audit_log with filters + cursor pagination. Requires
+  # role === 'admin' enforced in the service layer (not the handler).
+  # Index usage: the (occurred_at DESC) index covers the default order;
+  # the partial (subject_user_id, occurred_at DESC) and
+  # (action, occurred_at DESC) indexes accelerate the most common
+  # filters. See V004 audit_log indexes.
+  # ===========================================================================
+  IdentityAuditFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'spark-match-identity-audit-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: audit.handler
+      Description: Admin-only audit log read endpoint with filters + cursor pagination
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: !Sub 'identity-audit-${Environment}'
+          ENVIRONMENT: !Ref Environment
+          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
+      Policies:
+        - SecretsManagerReadWritePolicy:
+            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
 Outputs:
   IdentityRegisterFunctionArn:
     Value: !GetAtt IdentityRegisterFunction.Arn
@@ -423,6 +470,8 @@ Outputs:
     Value: !GetAtt IdentityChangePasswordFunction.Arn
   IdentityListUsersFunctionArn:
     Value: !GetAtt IdentityListUsersFunction.Arn
+  IdentityAuditFunctionArn:
+    Value: !GetAtt IdentityAuditFunction.Arn
   IdentityActivateUserFunctionArn:
     Value: !GetAtt IdentityActivateUserFunction.Arn
   IdentityDeactivateUserFunctionArn:

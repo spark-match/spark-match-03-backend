@@ -306,6 +306,65 @@ Lista paginada de todos los usuarios. **Admin only**.
 
 Ver [use-cases.md UC-7](./use-cases.md).
 
+### 4.5 `GET /v1/audit`
+
+Lista entradas de `identity.audit_log`. **Admin only** — el check
+`role === 'admin'` se enforces en `audit-service.ts` (no en el handler).
+Emits a `user.list_viewed` audit row tras cada consulta (forensics:
+quién consultó y qué filtros usó).
+
+**Auth**: requerida (`IdentityAuthorizer`).
+
+**Query params**:
+
+| Param | Tipo | Notas |
+|---|---|---|
+| `cursor` | string | Cursor opaco retornado por la consulta anterior (base64url de `{t, i}`). |
+| `limit` | 1-200 | Tamao de pgina (default 50, mximo 200). |
+| `actorUserId` | UUID | Filtra por el usuario que realiz la accin. |
+| `subjectUserId` | UUID | Filtra por el usuario objetivo de la accin. |
+| `action` | string | Filtra por tipo de evento (ej. `user.login`). |
+| `since` | ISO 8601 | Lmite inferior inclusivo sobre `occurredAt`. |
+| `until` | ISO 8601 | Lmite superior inclusivo sobre `occurredAt`. |
+
+**Response** (200):
+
+```json
+{
+  "success": true,
+  "data": {
+    "entries": [
+      {
+        "id": 12345,
+        "action": "user.login",
+        "actorUserId": "11111111-1111-4111-8111-111111111111",
+        "subjectUserId": null,
+        "metadata": { "ip": "1.2.3.4", "userAgent": "curl/8.0.0" },
+        "occurredAt": "2026-07-30T16:00:00.000Z"
+      }
+    ],
+    "nextCursor": "eyJ0IjoiMjAyNi0wNy0zMFQxNjowMDowMC4wMDBaIiwiaSI6IjEyMzQ1In0"
+  },
+  "meta": { "requestId": "uuid", "timestamp": "2026-..." }
+}
+```
+
+**`nextCursor`**: `null` cuando no hay ms resultados. Para paginar, pasar
+`?cursor=<nextCursor>` en la siguiente peticin.
+
+**Errores**: 401 (sin auth), 403 (`audit.admin_only` — no admin).
+
+> **ndices utilizados** (de V004):
+> - `identity_audit_log_occurred_at_idx` para el ORDER BY por defecto.
+> - `identity_audit_log_subject_idx` cuando se filtra por `subjectUserId`.
+> - `identity_audit_log_action_idx` cuando se filtra por `action`.
+>
+> **Nota**: el cursor es estable bajo inserciones concurrentes porque
+> el orden secundario `(id DESC)` desempata rows con el mismo
+> `occurred_at`.
+
+Ver [ADR-015](./adr/015-audit-log-writes.md).
+
 ### 4.2 `PATCH /v1/users/{userId}`
 
 Actualiza un usuario arbitrario. **Admin only** (o self con campos
@@ -454,9 +513,14 @@ del cursor en el futuro, versionarlo (`?cursor=v2:...`).
 
 - **Hoy**: pre-1.0. La ruta usa `/v1/` reservado para el primer contrato
   estable. Cambios incompatibles bump a `/v2/`.
-- **No hay** OpenAPI/JSON Schema artifact generado (pendiente — ver
-  ADR-013). Mientras tanto, este doc + los Zod schemas en cdigo son la
-  source of truth.
+- **OpenAPI 3.1 artifact**: [`docs/openapi.json`](./openapi.json)
+  auto-generado desde los schemas Zod. Regenerar con
+  `npm run generate:openapi` tras cualquier cambio de schema en
+  `contexts/identity/src/schemas/*` o en
+  `contexts/identity/src/openapi.ts`. El test
+  `scripts/generate-openapi.test.ts` verifica que el artefacto esté
+  sincronizado. Cada input/output de cada ruta está descrita como JSON
+  Schema draft-07 (compatible con OpenAPI 3.1). Ver [ADR-013 § Decisión](./adr/013-middy-zod-powertools-stack.md).
 
 ---
 

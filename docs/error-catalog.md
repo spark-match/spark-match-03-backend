@@ -165,6 +165,7 @@ Algunos handlers lanzan 400 con detail codes hand-rolled:
 | `update-user` | `/v1/users/{userId}` | PATCH | ✅ | `bad_request` (`validation.*`, `validation.empty_changes`) | `unauthorized` | `forbidden` (cuenta desactivada, no-admin-no-self, cambio de propio role/active) | `not_found` (userId no existe) | — | `internal` | `service_unavailable` |
 | `activate-user` | `/v1/users/{userId}/activate` | POST | ✅ | `bad_request` (missing `userId`) | `unauthorized` | `forbidden` (cuenta desactivada, no-admin) | `not_found` (userId no existe) | — | `internal` | `service_unavailable` |
 | `deactivate-user` | `/v1/users/{userId}/deactivate` | POST | ✅ | `bad_request` (missing `userId`) | `unauthorized` | `forbidden` (cuenta desactivada, no-admin, self-deactivation) | `not_found` (userId no existe) | — | `internal` | `service_unavailable` |
+| `audit` | `/v1/audit` | GET | - | `bad_request` (`validation.invalid_*` en filtros) | `unauthorized` | `forbidden` (`audit.admin_only` — role != admin) | - | - | `internal` | `service_unavailable` (`db.*`) |
 | `authorizer` (Lambda Authorizer, no HTTP) | — | — | — | — | API Gateway rechaza con 401 si `isAuthorized: false` | — | — | — | — | — |
 | `migrate` (direct invoke, no HTTP) | — | — | ✅ | `bad_request` (`validation.*` en `direction`) | IAM `lambda:InvokeFunction` | — | — | — | `internal` | `service_unavailable` (`db.*`) |
 

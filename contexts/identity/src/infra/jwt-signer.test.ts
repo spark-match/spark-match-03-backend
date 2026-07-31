@@ -1,15 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@spark-match/shared/infra', async () => {
-  const actual =
-    await vi.importActual<typeof import('@spark-match/shared/infra')>('@spark-match/shared/infra');
-  return {
-    ...actual,
-    createSecretsReader: vi.fn(),
-    withAwsErrorMapping: vi.fn(async (_dep: string, fn: () => Promise<unknown>) => fn()),
-  };
-});
-
 vi.mock('@aws-sdk/client-secrets-manager', () => {
   const send = vi.fn();
   const GetSecretValueCommand = vi

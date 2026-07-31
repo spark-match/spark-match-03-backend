@@ -81,9 +81,11 @@ todos los servicios externos y la wiring de red/VPC/secrets.
 **Notas**:
 - HTTP API Gateway NO tiene capa Lambda Authorizer cacheada
   (`AuthorizerResultTtlInSeconds: 0`); cada peticin re-verifica JWT.
-- Solo `PATCH /v1/users/me` invoca `IdentityAuthorizer`. Las otras 7
-  rutas protegidas dependen de middleware `requireAuth` (defensa en
-  profundidad, ver [auth-rbac.md § 3.2](./auth-rbac.md)).
+- Las 7 rutas protegidas invocan `IdentityAuthorizer` (PR-#79,
+  2026-07-30). Antes de eso, 1/8 rutas usaba Authorizer y 7/8
+  dependían exclusivamente del middleware `requireAuth` (defense in
+  depth). El middleware sigue activo como fallback (Bearer header) —
+  ver [auth-rbac.md § 3.2](./auth-rbac.md).
 - VPC: dev runs son **non-VPC** (subnet IDs vacos); staging/prod usan
   VPC con subnets privadas. El cdigo condicional vive en
   [`contexts/identity/template.yaml:48`](../contexts/identity/template.yaml).
@@ -104,21 +106,20 @@ are scoped per context but all attach to the same API ID.
 
 | Method | Path | Handler Lambda | Authorizer | Admin-only | Event emitted |
 |---|---|---|---|---|---|
-| `POST` | `/v1/auth/register` | `IdentityRegisterFunction` | none | no | `UserRegistered` |
-| `POST` | `/v1/auth/login` | `IdentityLoginFunction` | none | no | `UserLoggedIn` |
-| `GET`  | `/v1/users/me` | `IdentityGetMeFunction` | none¹ | no | — |
+| `POST` | `/v1/auth/register` | `IdentityRegisterFunction` | (público) | no | `UserRegistered` |
+| `POST` | `/v1/auth/login` | `IdentityLoginFunction` | (público) | no | `UserLoggedIn` |
+| `GET`  | `/v1/users/me` | `IdentityGetMeFunction` | `IdentityAuthorizer`¹ | no | — |
 | `PATCH`| `/v1/users/me` | `IdentityUpdateProfileFunction` | `IdentityAuthorizer` | no | `UserUpdated` |
-| `PUT`  | `/v1/users/me/password` | `IdentityChangePasswordFunction` | none¹ | no | `UserPasswordChanged` |
-| `GET`  | `/v1/users` | `IdentityListUsersFunction` | none¹ | **yes** | — |
-| `POST` | `/v1/users/{userId}/activate` | `IdentityActivateUserFunction` | none¹ | **yes** | `UserActivated` |
-| `POST` | `/v1/users/{userId}/deactivate` | `IdentityDeactivateUserFunction` | none¹ | **yes** | `UserDeactivated` |
-| `PATCH`| `/v1/users/{userId}` | `IdentityUpdateUserFunction` | none¹ | **yes** | `UserUpdated` |
+| `PUT`  | `/v1/users/me/password` | `IdentityChangePasswordFunction` | `IdentityAuthorizer`¹ | no | `UserPasswordChanged` |
+| `GET`  | `/v1/users` | `IdentityListUsersFunction` | `IdentityAuthorizer`¹ | **yes** | — |
+| `POST` | `/v1/users/{userId}/activate` | `IdentityActivateUserFunction` | `IdentityAuthorizer`¹ | **yes** | `UserActivated` |
+| `POST` | `/v1/users/{userId}/deactivate` | `IdentityDeactivateUserFunction` | `IdentityAuthorizer`¹ | **yes** | `UserDeactivated` |
+| `PATCH`| `/v1/users/{userId}` | `IdentityUpdateUserFunction` | `IdentityAuthorizer`¹ | **yes** | `UserUpdated` |
 
-¹ Authorizer wired to `none` at the route level — the handler enforces
-authentication + role checks via the `buildHandler().requireAuth(requireRole(...))`
-middleware. See [§ 3 Authorizer wiring](#3-authorizer-wiring) for the rationale
-and the [tracked inconsistency](../AGENTS.md) (only `update-profile` is wired
-through `IdentityAuthorizer` at the API layer; the rest rely on middleware).
+¹ `IdentityAuthorizer` (Lambda Authorizer REQUEST) verifica JWT en
+API Gateway. El handler también corre `requireAuth` middleware como
+fallback (Bearer header) — defense in depth. Ver
+[auth-rbac.md § 3.2](./auth-rbac.md).
 
 **Throttling**: cada route tiene `ThrottleSettings` (Rate + Burst) configurado
 en el CFN template (ver [ADR-018](adr/018-throttling-strategy.md)). Valores
@@ -197,9 +198,12 @@ attack surface).
 | `EventBridgePutEventsPolicy` | Register, ActivateUser, DeactivateUser, UpdateUser |
 | `SSMParameterReadPolicy` (`spark-match-${Environment}-*`) | Register, Authorizer, Migrate |
 
-> ⚠️ **Known scope issue (Sprint 5 backlog)**: `SecretsManagerReadWritePolicy`
-> grants `Resource: '*'` for Secrets Manager (5 occurrences). Must be scoped
-> to the specific secret ARNs before production. See tracked TODO.
+> ✅ **Scoped (PR-#80)**: cada `SecretsManagerReadWritePolicy` declara
+> `SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'` (o
+> `jwt-arn` para el Authorizer), por lo que el IAM policy desplegado
+> tiene `Resource: <secret ARN>` (no `Resource: '*'`). Los 9 bloques
+> están scopeados. El backlog P2 (Sprint 5) que mencionaba
+> "scope a ARNs específicos" se considera cerrado.
 
 ### 2.5 Source layout (deployed files)
 
@@ -239,29 +243,34 @@ via `Auth: { Authorizer: !Ref IdentityAuthorizer }`.
 required for downstream Lambdas — API Gateway forwards the returned context
 in the event payload).
 
-### 3.1 Current wiring (as of Sprint 1)
+### 3.1 Current wiring (as of Sprint 3, PR-#79)
 
-Only **one** route is wired to the Authorizer at the API layer:
+Las **7 rutas protegidas** están wireadas al `IdentityAuthorizer` en
+API Gateway (PR-#79, 2026-07-30). El patrón consistente es:
 
 ```yaml
-UpdateProfileApi:
+ProtectedApi:
+  Type: HttpApi
   Properties:
     ApiId: !Ref HttpApiId
-    Path: /v1/users/me
-    Method: PATCH
+    Path: /v1/...
+    Method: ...
     Auth:
-      Authorizer: !Ref IdentityAuthorizer   # ← only route with API-layer auth
+      Authorizer: !Ref IdentityAuthorizer
 ```
 
-The remaining 8 protected routes declare `Authorizer: NONE` and rely on the
-**handler-layer** `buildHandler().requireAuth(requireRole('admin'))`
-middleware to reject unauthenticated/wrong-role requests. This works
-defensively but means the Authorizer Lambda is bypassed for those paths.
+Las 2 rutas públicas (`/v1/auth/register`, `/v1/auth/login`) omiten
+el bloque `Auth` (sin opt-in al Authorizer, esperadas).
 
-**Why the inconsistency?** The Authorizer was wired last in the codebase;
-the 8 handlers were already protected by middleware. Wiring all routes
-through `IdentityAuthorizer` would be the cleaner model but requires
-re-deploying every route. **Tracked for Sprint 3.**
+**Defense in depth**: cada handler sigue corriendo
+`buildHandler().requireAuth(...)` middleware como fallback (Bearer
+header) para cubrir el caso `sam local invoke` (sin API Gateway) y
+tests E2E que no montan el Authorizer.
+
+> **Histórico**: antes de PR-#79, sólo `PATCH /v1/users/me` usaba
+> Authorizer en API Gateway; las otras 7 dependían exclusivamente
+> del middleware. Defense in depth funcionaba pero el Authorizer
+> Lambda corría solo 12% de las veces.
 
 ### 3.2 `AuthorizerResultTtlInSeconds: 0`
 

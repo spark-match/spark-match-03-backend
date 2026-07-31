@@ -1,9 +1,8 @@
 import { defineConfig } from 'vitest/config';
+import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
-  resolve: {
-    tsconfigPaths: true,
-  },
+  plugins: [tsconfigPaths()],
   optimizeDeps: {
     include: ['@spark-match/shared/http', '@spark-match/shared/infra'],
   },
@@ -14,6 +13,7 @@ export default defineConfig({
       'shared/src/**/*.test.ts',
       'contexts/**/*.test.ts',
       'events/**/*.test.ts',
+      'scripts/**/*.test.ts',
       'tests/**/*.test.ts',
     ],
     coverage: {
@@ -23,6 +23,7 @@ export default defineConfig({
         'shared/src/**/*.ts',
         'contexts/*/src/**/*.ts',
         'events/*/src/**/*.ts',
+        'scripts/**/*.ts',
       ],
       exclude: [
         '**/*.test.ts',

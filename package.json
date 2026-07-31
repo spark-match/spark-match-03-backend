@@ -27,6 +27,7 @@
     "layer:build:node-shared": "bash layers/node-shared/build.sh",
     "layer:build:node-runtime": "bash layers/node-runtime/build.sh",
     "layer:build:all": "npm run layer:build:node-shared && npm run layer:build:node-runtime",
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
     "migrate:create": "node-pg-migrate create --migrations-dir 'migrations' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public -- --helper false",
     "migrate:up": "node-pg-migrate up --migrations-dir 'migrations' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
     "migrate:down": "node-pg-migrate down --migrations-dir 'migrations' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",
@@ -49,8 +50,10 @@
     "husky": "^9.0.0",
     "node-pg-migrate": "^9.0.0",
     "prettier": "^3.3.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
+    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.10",
     "zod": "^4.4.3"
   },
