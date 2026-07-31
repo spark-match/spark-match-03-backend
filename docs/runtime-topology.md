@@ -121,6 +121,13 @@ API Gateway. El handler también corre `requireAuth` middleware como
 fallback (Bearer header) — defense in depth. Ver
 [auth-rbac.md § 3.2](./auth-rbac.md).
 
+**Throttling**: cada route tiene `ThrottleSettings` (Rate + Burst) configurado
+en el CFN template (ver [ADR-018](adr/018-throttling-strategy.md)). Valores
+iniciales: `/v1/auth/*` 5 req/s burst 10 (anti-bot / anti-brute-force IP-level
+básico), `/v1/audit` 20 req/s burst 40, resto 50 req/s burst 100. Capa 1 de la
+estrategia de 3 capas (Layer 2 = WAF deferrable; Layer 3 = app-level
+account lockout via `users.failed_login_attempts`).
+
 ### 1.2 Non-HTTP Lambda functions
 
 | Function | Invocation | Purpose |
