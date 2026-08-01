@@ -115,6 +115,10 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/auth/register
             Method: POST
+            # Edge throttling override: anti-bot signup (ADR-018).
+            ThrottleSettings:
+              RateLimit: 5.0
+              BurstLimit: 10
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -142,6 +146,10 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/auth/login
             Method: POST
+            # Edge throttling override: anti-brute-force IP-level (ADR-018).
+            ThrottleSettings:
+              RateLimit: 5.0
+              BurstLimit: 10
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -328,6 +336,11 @@ Resources:
             ApiId: !Ref HttpApiId
             Path: /v1/audit
             Method: GET
+            # Edge throttling override: query costosa (cursor pagination +
+            # joins a identity.audit_log). ADR-018.
+            ThrottleSettings:
+              RateLimit: 20.0
+              BurstLimit: 40
             Auth:
               Authorizer: !Ref IdentityAuthorizer
       Policies:
