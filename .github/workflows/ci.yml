@@ -54,3 +54,10 @@ jobs:
       working-directory: '.'
       npm-script: 'migrate:up'
       timeout-minutes: 10
+
+  gitleaks:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-gitleaks.yml@main
+    with:
+      environment-name: 'ci'
+    secrets:
+      GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
