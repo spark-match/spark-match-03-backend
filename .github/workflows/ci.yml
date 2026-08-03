@@ -39,7 +39,6 @@ jobs:
   # No AWS credentials, no access to RDS. Tracking table matches backend
   # package.json:migrate:* scripts (spark_match_migrations). See ADR-016.
   migrations-dry-run:
-    needs: []
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-migrations-dry-run.yml@main
     with:
       environment-name: 'ci'
@@ -54,6 +53,19 @@ jobs:
       working-directory: '.'
       npm-script: 'migrate:up'
       timeout-minutes: 10
+
+  actionlint:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-actionlint.yml@main
+    with:
+      environment-name: 'ci'
+
+  eslint:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-eslint.yml@main
+    with:
+      environment-name: 'ci'
+      node-version: '24'
+      eslint-version: 10
+      lint-script: lint
 
   gitleaks:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-gitleaks.yml@main
