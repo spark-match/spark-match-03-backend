@@ -47,7 +47,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  analyze:
+analyze:
     name: "CodeQL analyze"
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-codeql.yml@main
     with:

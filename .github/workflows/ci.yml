@@ -66,3 +66,10 @@ jobs:
       node-version: '24'
       eslint-version: 10
       lint-script: lint
+
+  gitleaks:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-gitleaks.yml@main
+    with:
+      environment-name: 'ci'
+    secrets:
+      GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
