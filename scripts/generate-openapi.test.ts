@@ -9,6 +9,7 @@ import { IDENTITY_OPERATIONS, ERROR_RESPONSE_SCHEMA } from '../contexts/identity
 import { ListUsersOutputSchema } from '../contexts/identity/src/schemas/index.js';
 import { PublicUserSchema } from '../contexts/identity/src/schemas/get-me.schema.js';
 import { buildDoc, jsonSchemaFor } from './generate-openapi.js';
+import { z as zns } from 'zod';
 
 describe('IDENTITY_OPERATIONS registry', () => {
   it('covers every protected route (defense in depth)', () => {
@@ -151,7 +152,6 @@ describe('generator internals (branch coverage)', () => {
 
   it('buildDoc attaches bearerAuth to bearer + admin operations but not none', () => {
     const doc = buildDoc();
-    const opById = new Map<string, ReturnType<typeof getOp>>();
 
     function getOp(p: string, m: string): unknown {
       const methods = doc.paths[p];
@@ -196,7 +196,6 @@ describe('generator internals (branch coverage)', () => {
   });
 
   it('jsonSchemaFor round-trips a simple object schema', () => {
-    const { z: zns } = require('zod') as typeof import('zod');
     const out = jsonSchemaFor(zns.object({ name: zns.string() }));
     expect(out).toMatchObject({
       type: 'object',
