@@ -206,7 +206,7 @@ describe('audit-repository.list', () => {
 
   it('fetches limit+1 to detect hasMore, returns nextCursor when more', async () => {
     const rows = Array.from({ length: 51 }, (_, i) => makeRow({ id: String(1000 + i) }));
-    const { db, builder } = makeDbReturning(rows);
+    const { db, builder: _builder } = makeDbReturning(rows);
     const repo = createAuditRepository(db);
     const result = await repo.list({ limit: 50 });
     expect(result.entries).toHaveLength(50);

@@ -143,3 +143,60 @@ vitest.config.mts                 # Coverage thresholds (80/80/80/80)
 - Sprint history:
   - **Sprint 1** (2026-07-28, hygiene + discoverability): PR #55 Dependabot, PR #57 README badges, PR #58 vitest thresholds, PR #59 ADR migration.
   - **Sprint 3 P3 close-out** (2026-07-30): PR #79 + #80 authorizer wiring, PR #81 + #82 TTL/IAM, PR #83 + #84 OpenAPI from Zod, PR #85 + #86 `GET /v1/audit` admin, PR #87 + #88 CORS allowlist + typecheck tsconfig. PR #89 closed (documented B8); PR #90 merged B8 docs. **B8 fully closed** (2026-07-31): `vite-tsconfig-paths` adopted, deep paths in `contexts/identity/tests/*.test.ts` migrated to alias — see `Path aliases` section above.
+
+## 12. CI workflow conventions and pipeline evaluation
+
+### 12.1 Naming and pinning conventions
+
+When creating or modifying any file under `.github/workflows/` (including caller wrappers for `spark-match-01-devops` reusables):
+
+- **Identifiers, inputs, outputs, display names, brand names**: kebab-case. Canonical brand spellings: SonarCloud → `sonar-cloud`, CodeQL → `codeql`, LaTeX → `latex`, ESLint → `eslint`, TFLint → `tflint`, SBOM → `sbom`, CycloneDX → `cyclonedx`, Terraform → `terraform`.
+- **Exceptions to kebab-case**: GitHub Actions secrets and OS env vars stay in `SNAKE_CASE`.
+- **Third-party sub-actions** (`actions/checkout`, `aws-actions/setup-sam`, etc.) keep upstream names — do NOT kebab-case them.
+- **Version pinning**: `@vN` (major) or `@N.N.N` (exact). Never SHA-pinned. Enforced by `spark-match-01-devops/tests/bats/no-sha-pinning.bats`.
+- **`name:` field**: always kebab-case. When using `${{ inputs.x }}` interpolation, concatenate segments with `-` (no spaces). Example: `name: "lint-${{ inputs.environment-name }}"`.
+
+### 12.2 Pipeline evaluation methodology (reuse-first)
+
+Before proposing any new reusable workflow, follow this discipline in order:
+
+1. **Read conventions (§12.1 above)**. Mandatory before any decision.
+2. **Inventory the existing catalog** at `spark-match-01-devops`:
+   - Reusables (`reusable-*.yml`): `actionlint`, `codeql`, `eslint`, `gitleaks`, `latex-build`, `latex-release`, `migrations-dry-run`, `node-build`, `node-test`, `node-typecheck`, `quality`, `sonar-terraform`, `sonar-typescript`, `terraform-apply`, `terraform-destroy`, `terraform-plan`, `terraform-validate`, `tflint`, `yamllint`.
+   - **Internal-only** (NOT callable from consumers per `spark-match-01-devops/docs/VERSIONING.md`): `ci.yml`, `codeql-actions.yml`, `commitlint.yml`, `release-please.yml`, `sbom.yml`.
+   - Atomic primitives (`spark-match-01-devops/.github/actions/<name>/action.yml`): `bats-runner`, `codeql-fail-on-alerts`, `setup-actionlint`, `validate-workflow-inputs`.
+3. **Decide, in this order**:
+   - **(a) Direct reuse**: does a reusable cover the requirement 100%? Cite the file and exact inputs that apply.
+   - **(b) 80% reuse + caller-side wrapper**: identify the gap. Two options: (i) caller-side wrapper to pre/post-process; (ii) extend the reusable with an optional retrocompatible input. If the gap is 1 line, prefer (i); if it affects N future callers, prefer (ii).
+   - **(c) New reusable**: only if neither (a) nor (b) applies. List which existing primitives can be composed. If a needed primitive is missing and would be reused in N reusables, propose creating the primitive FIRST, then the reusable.
+4. **Only propose creating if**:
+   - No existing reusable applies (even at 80%).
+   - No atomic + caller-side wrapper applies.
+   - The cost of forking (copy + maintain outside catalog) is greater than the cost of adding to the catalog (CI + versioning + CODEOWNERS + bats tests).
+5. **When proposing creation, document**:
+   - Filename: `reusable-<kebab>.yml` (per §12.1).
+   - Inputs (kebab-case) with defaults; note which are reused from existing recipes.
+   - `permissions:` block; use `id-token: write` for OIDC; never introduce new scopes without justification.
+   - Steps that reference existing reusables/primitives; if introducing a new step, justify.
+   - GH Environment binding when secrets are needed: `environment: ${{ inputs.environment-name || inputs.environment || inputs.working-directory }}` with `secrets: inherit` (or the catalog's current pattern).
+   - Risk level (low/medium/high) and backward compatibility.
+6. **Output format (strict)** when proposing:
+
+   ```
+   ## Recomendacion: <reusar X> | <crear Y> | <fork Z>
+
+   ### Inventario revisado
+   - Reusables candidatos: ...
+   - Primitivas atomicas: ...
+   - Caller-side wrapper viable: si/no, por que
+
+   ### Opcion recomendada
+   - Accion: <reusar|wrapper|crear>
+   - Justificacion: 2-3 lineas
+   - Si crear: archivo, inputs, permisos, GH env binding
+
+   ### Riesgos
+   - ...
+   ```
+
+**Worked example** (PRs #107–#109, Sprint 3 P3 close-out): the requirement "add actionlint + eslint + gitleaks gates to backend CI" maps 1:1 to three existing reusables. Recommendation: `reusar` all three. `gitleaks` required verifying that `GITLEAKS_LICENSE` is configured as an org secret with visibility `all` (`gh api orgs/spark-match/actions/secrets`); it is. No new recipe needed.

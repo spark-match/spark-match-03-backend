@@ -1,0 +1,49 @@
+---
+# yamllint configuration for spark-match-03-backend
+# Docs: https://yamllint.readthedocs.io/
+
+extends: default
+
+ignore: |
+  .git/
+  node_modules/
+  coverage/
+  dist/
+  .aws-sam/
+  layers/*/dist/
+  layers/*/node_modules/
+  .github/workflows/
+  .github/dependabot.yml
+
+rules:
+  # Allow longer lines (SAM descriptions + nested resources regularly
+  # exceed the default 80). Other rules (indentation, truthy, etc.)
+  # still apply.
+  line-length:
+    max: 200
+
+  # Allow multiple documents in one file (--- separators) since SAM
+  # templates and some configs use them.
+  document-start: disable
+
+  # Allow truthy values like 'on' (used in workflows) and 'yes'
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off']
+    check-keys: false
+
+  # Allow comments to be indented differently from parent
+  comments:
+    min-spaces-from-content: 1
+    require-starting-space: true
+
+  # Disable new-line enforcement. Repo is checked out with CRLF on
+  # Windows and LF on Linux; yamllint's default `platform` rule would
+  # fail on the "wrong" side either way. A proper fix would be a
+  # .gitattributes rule with `* text=auto eol=lf`; tracked separately.
+  new-lines: disable
+
+  # SAM uses anchors (e.g. {Ref: ...}, {GetAtt: [...]}); the default
+  # braces rule is too strict for those nested inside strings.
+  braces:
+    max-spaces-inside: 2
+    min-spaces-inside-empty: 0
