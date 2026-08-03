@@ -73,3 +73,8 @@ jobs:
       environment-name: 'ci'
     secrets:
       GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  yamllinks:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-yamllint.yml@main
+    with:
+      environment-name: 'ci'
