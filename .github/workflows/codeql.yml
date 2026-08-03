@@ -33,7 +33,7 @@ on:
   pull_request:
     branches: [main, dev]
   schedule:
-    - cron: '17 6 * * 1'
+    - cron: '0 8 * * *'
 
 permissions:
   actions: read
