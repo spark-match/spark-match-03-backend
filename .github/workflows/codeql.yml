@@ -48,7 +48,7 @@ concurrency:
 
 jobs:
   analyze:
-    name: "Analyze (${{ matrix.language }})"
+    name: "CodeQL analyze"
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-codeql.yml@main
     with:
       languages: 'javascript,actions'
