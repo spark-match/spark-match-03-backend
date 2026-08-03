@@ -36,11 +36,13 @@ rules:
     min-spaces-from-content: 1
     require-starting-space: true
 
-  # Disable new-line enforcement. Repo is checked out with CRLF on
-  # Windows and LF on Linux; yamllint's default `platform` rule would
-  # fail on the "wrong" side either way. A proper fix would be a
-  # .gitattributes rule with `* text=auto eol=lf`; tracked separately.
-  new-lines: disable
+  # Enforce LF line endings. Now that .gitattributes sets
+  # `* text=auto eol=lf`, every text file is normalized to LF on
+  # commit regardless of the OS doing the commit. The previous
+  # `new-lines: disable` was a workaround for the cross-OS
+  # inconsistency; with .gitattributes in place, LF is canonical.
+  new-lines:
+    type: unix
 
   # SAM uses anchors (e.g. {Ref: ...}, {GetAtt: [...]}); the default
   # braces rule is too strict for those nested inside strings.
