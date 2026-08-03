@@ -128,7 +128,7 @@ vitest.config.mts                 # Coverage thresholds (80/80/80/80)
 
 ## Out of scope for agents
 
-- Modifying the recipe under `spark-match-01-devops/.github/workflows/sonar-*.yml`. That is owned by QA / devops.
+- Modifying recipes under `spark-match-01-devops/.github/workflows/reusable-*.yml`. That is owned by QA / devops.
 - Changing the SonarCloud Quality Gate `Spark Match Way` (id 157178). Owned by QA.
 - Adding new dependencies without a separate dependency-review PR.
 - Force-pushing to `main` or `dev`. Force-push to your own branch is OK to incorporate PR review feedback.
@@ -143,6 +143,7 @@ vitest.config.mts                 # Coverage thresholds (80/80/80/80)
 - Sprint history:
   - **Sprint 1** (2026-07-28, hygiene + discoverability): PR #55 Dependabot, PR #57 README badges, PR #58 vitest thresholds, PR #59 ADR migration.
   - **Sprint 3 P3 close-out** (2026-07-30): PR #79 + #80 authorizer wiring, PR #81 + #82 TTL/IAM, PR #83 + #84 OpenAPI from Zod, PR #85 + #86 `GET /v1/audit` admin, PR #87 + #88 CORS allowlist + typecheck tsconfig. PR #89 closed (documented B8); PR #90 merged B8 docs. **B8 fully closed** (2026-07-31): `vite-tsconfig-paths` adopted, deep paths in `contexts/identity/tests/*.test.ts` migrated to alias — see `Path aliases` section above.
+  - **Sprint 3 CI modernization** (2026-08-03, dev + main aligned): PR #107 renamed 3 callers to the `reusable-*` prefix after `spark-match-01-devops` standardized its catalog; PR #108 adopted `reusable-actionlint.yml` (workflow YAML syntax gate) and `reusable-eslint.yml` (npm lint gate); PR #109 adopted `reusable-gitleaks.yml` (secret-scan gate via org-level `GITLEAKS_LICENSE`); PR #110 fixed SHA-pinning in `deploy.yml` per §12.1; PR #111 documented §12 (naming conventions + pipeline-evaluation methodology); PR #112 + #115 adopted `reusable-yamllint.yml` (config + job); PR #114 synced codeql cron from PR #113 (daily `0 8 * * *`); PR #116 chore-synced dev → main. CI went from 3 jobs (sonar, migrations-dry-run, codeql) to 6 jobs (+ actionlint, eslint, gitleaks, yamllinks).
 
 ## 12. CI workflow conventions and pipeline evaluation
 
