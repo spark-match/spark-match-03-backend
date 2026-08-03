@@ -19,31 +19,31 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:
-      - name: Checkout
+      - name: checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: setup-node-js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup AWS SAM CLI
+      - name: setup-aws-sam-cli
         uses: aws-actions/setup-sam@v2
 
-      - name: Install dependencies
+      - name: install-dependencies
         run: npm ci
 
-      - name: Build shared workspace
+      - name: build-shared-workspace
         run: npm run build:shared
 
-      - name: Build Lambda Layers
+      - name: build-lambda-layers
         run: npm run layer:build:all
 
-      - name: SAM Build
+      - name: sam-build
         run: sam build --use-container
 
-      - name: SAM Deploy
+      - name: sam-deploy
         run: >
           sam deploy
           --config-env ${{ inputs.environment }}
