@@ -103,19 +103,29 @@ If step 4 succeeds, `main` and `dev` are topologically identical. The 37
 squash-merged sync commits on main become orphaned (still reachable via
 the backup branch — see below) but no longer affect the working view.
 
-### Backup branch (created 2026-08-04)
+### Backup branch (created 2026-08-04, deleted same day)
 
-The pre-linearization state of `main` is preserved in:
+The pre-linearization state of `main` was preserved in:
 
 - Local: `backup-main-pre-linearize`
 - Remote: `origin/backup-main-pre-linearize` (commit `c12b23a`)
 
-This branch contains the original 37-commit topology. If linearization
-causes data loss or audit-trail concerns, this branch can be promoted
-back to `main` (with ruleset relaxation).
+This branch contained the original 37-commit topology. AGENTS.md §4.6
+rule 6 prescribes ≥ 30 days retention, but the user (developer) elected
+to delete it on the same day. Deletion:
 
-The backup branch can be deleted 30 days after successful linearization,
-once the team confirms the new topology is acceptable.
+- Local: `git branch -D backup-main-pre-linearize` (`-D` because git's
+  `-d` refuses — branch was not fully merged into any active ref).
+- Remote: `git push origin --delete backup-main-pre-linearize`.
+
+Risk acknowledged: if main had ended up in a bad state, the pre-#154
+topology is no longer reachable from any branch. The commits are still
+in git's reflog for ~30 days, but rolling back is now harder.
+
+Going forward, the team should either:
+- Wait the full ≥ 30 days before deletion (per §4.6 rule 6).
+- Skip creating a backup branch entirely if the change is non-destructive
+  (Path A cherry-pick is non-destructive — it only adds new commits).
 
 ## Fallback path (Path 1 — rules-compliant)
 
@@ -248,14 +258,17 @@ If Path 0 is ever revived in the future, the steps remain:
 ### Backup branch lifecycle (per §4.6 rule 6)
 
 `backup-main-pre-linearize` (commit `c12b23a`, pre-homologation state of
-main) was created 2026-08-04. It is retained for ≥ 30 days post-#154
-as a safety net. After 2026-09-04, if no rollback is needed, it can
-be deleted via:
+main) was created 2026-08-04. The §4.6 rule 6 prescribes ≥ 30 days
+retention. **Actual retention: 0 days** — the user (developer)
+requested same-day deletion, which the agent executed via
+`git push origin --delete backup-main-pre-linearize` and
+`git branch -D backup-main-pre-linearize`. This was logged here as a
+deviation from §4.6 rule 6.
 
-```bash
-git push origin --delete backup-main-pre-linearize
-git branch -d backup-main-pre-linearize
-```
+If Path 0 is ever revived in the future and a backup branch is needed,
+**wait the full ≥ 30 days before deletion**. The early deletion
+introduced minor risk (no rollback path to pre-#154 topology; commits
+still in reflog for ~30 days but no longer reachable from any branch).
 
 ## Sprint 9 homologation context
 
@@ -276,7 +289,7 @@ stays divergent by design. Content is always in sync per §4.4.
 
 - AGENTS.md §4.3, §4.4, §4.5, §4.6 (Path 0 closed as won't-fix in §4.3; B27 closed in §13).
 - GitHub ruleset: https://github.com/spark-match/spark-match-03-backend/rules
-- Backup branch: `backup-main-pre-linearize` (commit `c12b23a`) — retain ≥ 30 days post-#154.
+- Backup branch: `backup-main-pre-linearize` (commit `c12b23a`) — **deleted same day** (deviation from §4.6 rule 6 ≥ 30 days retention). See "Backup branch lifecycle" section above.
 - SonarCloud binding fix audit (sibling deferred task):
   `docs/audits/sonarcloud-binding-fix-2026-08-04.md`.
 - PR #141: Sprint 9 sync to main (Sprints 4-9 close-out).
