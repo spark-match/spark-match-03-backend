@@ -125,6 +125,23 @@ jobs:
       node-version: '24'
       test-script: 'test'
 
+  # SPRINT 6 - commitlint: enforces Conventional Commits on PR commits.
+  # Closes B13. Uses reusable-commitlint.yml from spark-match-01-devops.
+  # Evaluates the PR's commit subjects (default depth: 2) against the
+  # local .commitlintrc.json. help-url points to AGENTS.md §4.2 so
+  # failure messages direct contributors to the project's commit
+  # conventions.
+  #
+  # NOT enabling post-merge `commitlint-main` required check (which
+  # 01-devops uses in PR #276): a single-author project with admin
+  # bypass for merge means the post-merge check has no incremental
+  # catch value beyond what the PR-side check already provides.
+  # Revisit when a second CODEOWNER exists.
+  commitlint:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-commitlint.yml@main
+    with:
+      help-url: 'https://github.com/spark-match/spark-match-03-backend/blob/main/AGENTS.md#4-pull-request-workflow'
+
   gitleaks:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-gitleaks.yml@main
     with:
