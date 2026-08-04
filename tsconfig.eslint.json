@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "paths": {
+      "@spark-match/shared": ["./shared/src/index.ts"],
+      "@spark-match/shared/*": ["./shared/src/*"]
+    }
+  },
+  "include": [
+    "shared/src/**/*.ts",
+    "contexts/*/src/**/*.ts",
+    "contexts/*/tests/**/*.ts",
+    "events/*/src/**/*.ts",
+    "scripts/**/*.ts",
+    "vitest.config.mts",
+    "eslint.config.mjs",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".aws-sam",
+    "coverage"
+  ]
+}
