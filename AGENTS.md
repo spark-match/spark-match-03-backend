@@ -126,15 +126,20 @@ The repo ruleset currently enforces three rules that together shape the homologa
 2. No force-push to `main`.
 3. Linear history required (no merge commits on `main`).
 
-**Three promotion paths, in order of preference:**
+**Three promotion paths:**
 
-| Path | Method | Topological homologation | Requires admin task? |
-|---|---|---|---|
-| **Path 0** | `git push origin dev:main --force-with-lease` after temporarily relaxing ruleset | ✅ Perfect (main == dev) | ✅ Yes — admin must relax ruleset |
-| **Path 1** | Rebase-merge via PR (`git rebase origin/main`, drop merge commits, rebase-merge) | ⚠️ Partial (main = linearized dev; dev retains merge commits) | ❌ No |
-| **Path A** | Squash-merge via PR (status quo pre-Sprint 9) | ❌ Content-only (topology diverges by design) | ❌ No |
+| Path | Method | Topological homologation | Requires admin task? | Status |
+|---|---|---|---|---|
+| **Path 0** | `git push origin dev:main --force-with-lease` after temporarily relaxing ruleset | ✅ Perfect (main == dev) | ✅ Yes — admin must relax ruleset | **Won't fix** — see §13 B27 |
+| **Path 1** | Rebase-merge via PR (`git rebase origin/main`, drop merge commits, rebase-merge) | ⚠️ Partial (main = linearized dev; dev retains merge commits) | ❌ No | Available; conflicts on pre-squash-merge-era commits make it impractical |
+| **Path A** | Squash-merge via PR (status quo pre-Sprint 9) | ❌ Content-only (topology diverges by design) | ❌ No | **Baseline operational path** — adopted 2026-08-04 via PR #154 |
 
-**Current state (2026-08-04):** Path 0 is the preferred homologation path but requires an admin task (ruleset relaxation) that the user has accepted ownership of. The agent awaits completion. See `docs/audits/main-homologation-2026-08-04.md` for diagnostic, fallback steps, and admin task checklist.
+**Current state (2026-08-04):** Path A is the operational baseline. After PR #154, `git diff --stat origin/main origin/dev` returns EMPTY (content homologation), but the commit topology stays divergent by design (squash-merge collapses dev's granular history into 1 commit on main). Path 0 was deferred indefinitely as **won't fix** because:
+- Ruleset relaxation requires platform-team action via GitHub UI.
+- Topological divergence is purely cosmetic (no functional impact).
+- Content divergence — the operationally important signal — is what §4.4 enforces, and that is now EMPTY.
+
+The full diagnostic, decision trail, and B27 closure are in `docs/audits/main-homologation-2026-08-04.md`.
 
 **Promote when — and only when:**
 
@@ -459,6 +464,7 @@ for kebab-case and brand spellings; §12.1 below mirrors it.
 - Changing `spark-match-01-devops/governance/repository-governance.json` or applying org rulesets.
 - Adding new dependencies without a separate dependency-review PR.
 - Force-pushing to `main` or `dev`. Force-pushing your own feature branch to incorporate review feedback is fine.
+  - Exception: Path 0 homologation (see §4.3) — closed as won't-fix on 2026-08-04. Path 0 is no longer pursued. §4.6 backup-branch lifecycle still applies if Path 0 is ever revived in the future.
 - Dismissing security alerts without following §6.
 
 ---
@@ -554,7 +560,7 @@ Verified 2026-08-04. Fix these in scoped PRs; do not bundle them.
 
 | # | Task | Status | Refs |
 |---|---|---|---|
-| **B27** | **Modify GitHub ruleset to allow force-push to `main` for admins** (relax "no force-push" + "linear history" + "PR-only" rules temporarily). Required for Path 0 homologation. User accepted ownership on 2026-08-04. | **Pending admin task** | `docs/audits/main-homologation-2026-08-04.md`, backup branch `backup-main-pre-linearize` |
+| **B27** | **Modify GitHub ruleset to allow force-push to `main` for admins** (relax "no force-push" + "linear history" + "PR-only" rules temporarily). Required for Path 0 homologation. | **Won't fix** — closed 2026-08-04 via PR #154 (Path A adopted as baseline). Path 0 deferred indefinitely. Topological divergence is purely cosmetic; content divergence is what §4.4 enforces, and that is now EMPTY. | `docs/audits/main-homologation-2026-08-04.md`, backup branch `backup-main-pre-linearize` (retain ≥ 30 days post #154) |
 
 ### Correctness (fix first)
 
