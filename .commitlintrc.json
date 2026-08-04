@@ -45,6 +45,7 @@
         "review",
         "cors",
         "repo",
+        "sync",
         "docs",
         "migration",
         "github"
