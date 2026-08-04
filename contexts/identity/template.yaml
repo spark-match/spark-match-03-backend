@@ -329,20 +329,6 @@ Resources:
             Method: PATCH
             Auth:
               Authorizer: !Ref IdentityAuthorizer
-
-        AuditApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApiId
-            Path: /v1/audit
-            Method: GET
-            # Edge throttling override: query costosa (cursor pagination +
-            # joins a identity.audit_log). ADR-018.
-            ThrottleSettings:
-              RateLimit: 20.0
-              BurstLimit: 40
-            Auth:
-              Authorizer: !Ref IdentityAuthorizer
       Policies:
         - SecretsManagerReadWritePolicy:
             SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
@@ -456,6 +442,20 @@ Resources:
       CodeUri: ./src/handlers
       Handler: audit.handler
       Description: Admin-only audit log read endpoint with filters + cursor pagination
+      Events:
+        AuditApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiId
+            Path: /v1/audit
+            Method: GET
+            # Edge throttling override: query costosa (cursor pagination +
+            # joins a identity.audit_log). ADR-018.
+            ThrottleSettings:
+              RateLimit: 20.0
+              BurstLimit: 40
+            Auth:
+              Authorizer: !Ref IdentityAuthorizer
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: !Sub 'identity-audit-${Environment}'

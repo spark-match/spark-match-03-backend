@@ -61,6 +61,15 @@ permissions:
   id-token: write
   contents: read
 
+# Concurrency: never cancel an in-flight deploy (cancel-in-progress:
+# false). Two concurrent deploys to the same env race on CloudFormation
+# stack name + S3 bucket prefix and either fail or leave the stack in
+# an indeterminate state. Group key includes inputs.environment so
+# dev / staging / prod can deploy in parallel. Closes B15.
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

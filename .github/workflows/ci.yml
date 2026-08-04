@@ -31,6 +31,16 @@ permissions:
   contents: read
   pull-requests: read
 
+# PR-aware concurrency: cancel in-progress CI runs for the same PR/ref.
+# Closes B15 (governance gap vs 02-infrastructure). Without this, a push
+# to a PR branch while CI is running spawns a parallel run that wastes
+# minutes of runner time. ci.yml deploys its own group here because
+# recipes in §10.2 (sonar-typescript, etc.) own their own concurrency
+# blocks; we don't want a deadlock with the caller.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sonar:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-sonar-typescript.yml@main
