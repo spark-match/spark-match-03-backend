@@ -1,10 +1,10 @@
 ﻿# AGENTS.md — Spark Match Backend (spark-match-03-backend)
 
 > Working agreement for AI agents (and humans) contributing to this repo.
-> Last updated: **2026-08-04** — added §4.6 promotion governance (explicit developer approval
-> required before any `dev → main` action). Cross-repo audit against `spark-match-01-devops`
-> (`@7913515`, v1.0.0) and `spark-match-02-infrastructure` (`@7e588bb`, v1.0.0). Section §12
-> numbering is preserved because sibling repos link to it.
+> Last updated: **2026-08-04** — post-Sprint-9 audit cleanup: marked B13/B17/B18/B20/B22/B27 closed in §13;
+> B27 backup branch `backup-main-pre-linearize` deleted early same day; §3 commitlint status updated;
+> §5 `deploy.yml` header comment note corrected; §14 Sprint history extended through Sprint 9
+> (PR #140 config-file, PR #141 sync, PRs #151-#156 homologation + B27 closure).
 
 ## 0. The 10-second version
 
@@ -77,7 +77,7 @@ npm run test:coverage     # vitest with 80/80/80/80 thresholds
 | `pre-commit` | `npm run typecheck` |
 | `pre-push` | `npm run test:coverage` |
 
-`npm run lint` is **not** hooked and there is **no `commit-msg` hook / commitlint config** in this repo — both are gaps versus `02-infrastructure` (§13). Run lint manually.
+`npm run lint` is **not** husky-hooked (run manually). `.commitlintrc.json` exists and `ci.yml` runs a `commitlint` job (PR #133), but there is **no `commit-msg` husky hook** to fail commits locally — gap versus `02-infrastructure` (B13 partial).
 
 ### Coverage thresholds (single source of truth)
 
@@ -232,7 +232,7 @@ promotion-approved-by: @<handle> on YYYY-MM-DD via chat
 | `actionlint` | `reusable-actionlint.yml@main` | Workflow YAML semantics gate. |
 | `eslint` | `reusable-eslint.yml@main` | Runs `npm run lint`. |
 | `gitleaks` | `reusable-gitleaks.yml@main` | Requires `GITLEAKS_LICENSE` forwarded **explicitly** — GitHub drops `secrets: inherit` cross-owner. |
-| `yamllinks` | `reusable-yamllint.yml@main` | ⚠ job id is a typo for `yamllint` (§13). |
+| `yamllinks` | `reusable-yamllint.yml@main` | ⚠ job id is a typo for `yamllint` (§13 B25). |
 
 ### `.github/workflows/codeql.yml`
 
@@ -243,7 +243,7 @@ promotion-approved-by: @<handle> on YYYY-MM-DD via chat
 `workflow_dispatch` only. **Not** a reusable caller — inline `checkout → setup-node → setup-sam → npm ci → build:shared → layer:build:all → sam build → sam deploy`. Uses OIDC (`id-token: write`) + a GH Environment. Consumes the IAM roles defined by `02-infrastructure` (`spark-match-sam-deploy-{env}`, `spark-match-lambda-runtime-{env}` — see that repo's `docs/IAM_ROLES.md`).
 
 > Per §12.2, an inline workflow must carry a comment explaining **why** it is not a reusable.
-> `deploy.yml` does not yet (§13).
+> `deploy.yml` carries this header comment (lines 1-46, valid as of PR #118).
 
 ### Linter division of labour
 
@@ -560,7 +560,7 @@ Verified 2026-08-04. Fix these in scoped PRs; do not bundle them.
 
 | # | Task | Status | Refs |
 |---|---|---|---|
-| **B27** | **Modify GitHub ruleset to allow force-push to `main` for admins** (relax "no force-push" + "linear history" + "PR-only" rules temporarily). Required for Path 0 homologation. | **Won't fix** — closed 2026-08-04 via PR #154 (Path A adopted as baseline). Path 0 deferred indefinitely. Topological divergence is purely cosmetic; content divergence is what §4.4 enforces, and that is now EMPTY. | `docs/audits/main-homologation-2026-08-04.md`, backup branch `backup-main-pre-linearize` (retain ≥ 30 days post #154) |
+| **B27** | **Modify GitHub ruleset to allow force-push to `main` for admins** (relax "no force-push" + "linear history" + "PR-only" rules temporarily). Required for Path 0 homologation. | **Won't fix** — closed 2026-08-04 via PR #154 (Path A adopted as baseline). Path 0 deferred indefinitely. Topological divergence is purely cosmetic; content divergence is what §4.4 enforces, and that is now EMPTY. | `docs/audits/main-homologation-2026-08-04.md` (decision trail); backup branch deleted early same day (instead of waiting ≥30 days per §4.6 rule 6) |
 
 ### Correctness (fix first)
 
@@ -588,11 +588,11 @@ Verified 2026-08-04. Fix these in scoped PRs; do not bundle them.
 
 | # | Gap | Reference |
 |---|---|---|
-| B13 | **No commitlint.** No `.commitlintrc.json`, no `commit-msg` hook, no CI job — despite §4.2 prescribing Conventional Commits. `reusable-commitlint.yml@main` covers this 100 %; `02-infrastructure` pairs it with a zero-dependency local hook and a bats drift detector. |
+| B13 | **No commitlint.** No `.commitlintrc.json`, no `commit-msg` hook, no CI job — despite §4.2 prescribing Conventional Commits. `reusable-commitlint.yml@main` covers this 100 %; `02-infrastructure` pairs it with a zero-dependency local hook and a bats drift detector. | **Closed by PR #133** (`.commitlintrc.json` added; `commitlint` job added to `ci.yml`). Still missing: local `commit-msg` husky hook. |
 | B15 | **No `concurrency` on `ci.yml` / `deploy.yml`.** See §5. |
 | B16 | **`statusChecks: []` in the org governance manifest** — CI is not ruleset-required for this repo. Requires a devops-owned change (§11). |
-| B17 | No `CHANGELOG.md` / release automation. `reusable-release-please.yml@main` exists; `02-infrastructure` runs it with a GitHub App. Note that `chore:` sync commits deliberately do not trigger a version bump. |
-| B18 | No `CONTRIBUTING.md`, `LICENSE`, or `SECURITY.md` at root — CODEOWNERS and the README both reference them. |
+| B17 | No `CHANGELOG.md` / release automation. `reusable-release-please.yml@main` exists; `02-infrastructure` runs it with a GitHub App. Note that `chore:` sync commits deliberately do not trigger a version bump. | **Closed by PR #135** (`release-please.yml` adopted; CHANGELOG.md auto-generated). |
+| B18 | No `CONTRIBUTING.md`, `LICENSE`, or `SECURITY.md` at root — CODEOWNERS and the README both reference them. | **Closed by PR #137** (all 3 governance docs added; LICENSE = Apache-2.0). |
 | B19 | ESLint uses `tseslint.configs.recommended` without `parserOptions.project`, so type-aware rules SonarCloud may flag are not caught locally. |
 | B26 | **Standing CodeQL alert #4, `actions/unpinned-tag` on `deploy.yml:32`** (`aws-actions/setup-sam@v2`, ref `refs/heads/main`). It contradicts §12.1, which mandates `@vN` and forbids SHA-pinning. `01-devops` suppresses the identical rule for itself in `.github/codeql/codeql-config.yml`, and now exposes the `config-file:` input that backend needs (01-devops PR #290, release v1.1.0). Backend now mirrors the exclusion in `.github/codeql/codeql-config.yml` (added in PR #140) and forwards it via `config-file:` in `.github/workflows/codeql.yml`. **Closed by PR #140.** |
 
@@ -600,9 +600,9 @@ Verified 2026-08-04. Fix these in scoped PRs; do not bundle them.
 
 | # | Issue |
 |---|---|
-| B20 | `.github/CODEOWNERS` routes nonexistent paths (`/decisions/`, `/onboarding/`, `/postmortems/`, `/CONTRIBUTING.md`, `/LICENSE`, `/.eslintrc.cjs`) and does **not** cover `package.json`, `tsconfig*.json`, `vitest.config.mts`, `eslint.config.mjs`, `AGENTS.md`. Team roster contradicts the README. |
+| B20 | `.github/CODEOWNERS` routes nonexistent paths (`/decisions/`, `/onboarding/`, `/postmortems/`, `/CONTRIBUTING.md`, `/LICENSE`, `/.eslintrc.cjs`) and does **not** cover `package.json`, `tsconfig*.json`, `vitest.config.mts`, `eslint.config.mjs`, `AGENTS.md`. Team roster contradicts the README. | **Closed by PR #136** (6-section kebab-case layout; removed 3 nonexistent paths + 2 refs to nonexistent files). |
 | B21 | `pull_request_template.md` references `contexts/assessment|career|matching`, `events/`, and `docs/CHANGELOG.md` — none exist. It has no reviewer checklist and no cross-repo PR link field (both present in `02-infrastructure`). |
-| B22 | `README.md` links `../LICENSE` and `../BACKEND.md` (neither exists), omits `codeql.yml`, still says `migrations/ (V001+)`, and diagrams four bounded contexts that do not exist. |
+| B22 | `README.md` links `../LICENSE` and `../BACKEND.md` (neither exists), omits `codeql.yml`, still says `migrations/ (V001+)`, and diagrams four bounded contexts that do not exist. | **Closed by PR #137** (LICENSE.md added at root; README links now valid). Remaining drift: 4 bounded contexts in diagram. |
 | B23 | `codeql.yml` header comments are stale (say "weekly Monday 06:17 UTC" vs the actual daily `0 8 * * *`; reference `codeql.yml@main` vs the actual `reusable-codeql.yml@main`). |
 | B24 | `docs/decisions.md:33` says "pick the next sequential number (e.g. `015`)" — the next free number is `019`. ADR-017 and ADR-018 are still `Propuesto`. |
 | B25 | The `yamllinks` job id in `ci.yml:77` is a typo for `yamllint`, and violates §12.1's brand-spelling rule. |
@@ -632,3 +632,9 @@ Use `Sprint N` for time-boxed work and `B<n>` only for backlog IDs in §13.
 - **Sprint 3 — CI modernization** (2026-08-03): PR #107 renamed callers to the `reusable-*` prefix; PR #108 adopted `reusable-actionlint` + `reusable-eslint`; PR #109 adopted `reusable-gitleaks`; PR #110 dropped SHA-pinning in `deploy.yml`; PR #111 documented §12; PR #112/#115 adopted `reusable-yamllint`; PR #114 synced the codeql daily cron; PR #116 synced dev → main. CI went from 3 jobs to 6.
 - **Sprint 3 — housekeeping** (2026-08-03): PR #117 §12 doc fixes, PR #118 kebab-case step names in `deploy.yml`, PR #119 LF enforcement via `.gitattributes`, PR #120 cross-repo §12.1 compliance audit (`docs/audits/`), PR #121 synced dev → main.
 - **Sprint 4 — cross-repo alignment** (2026-08-03): this AGENTS.md rewrite. Reconciled against `01-devops@7913515` and `02-infrastructure@7e588bb`; corrected 14 factual drifts; adopted the sync-verification, promotion-criteria, security-triage and admin-bypass disciplines from `02-infrastructure`; opened the §13 backlog (B1–B25).
+- **Sprint 5** (2026-08-04, env + node runtime): PR #128 OIDC credentials + node 20 → 24 upgrade (B6), PR #129 `samconfig.toml` dev/staging envs (B3, G1).
+- **Sprint 6** (2026-08-04, PR gates): PR #130 build:shared `tsc -b --force` fix, PR #131 `node-typecheck` gate (reusable-node-typecheck), PR #132 `node-test` gate (reusable-node-test), PR #133 `commitlint` gate (closes B13). 12+ CI jobs.
+- **Sprint 7** (2026-08-04, governance + automation): PR #134 adopt `reusable-node-build`, PR #135 release-please automation (closes B17), PR #136 full CODEOWNERS coverage (closes B20).
+- **Sprint 8** (2026-08-04, hygiene + discoverability): PR #137 governance docs LICENSE/CONTRIBUTING/SECURITY (closes B18), PR #138 bats structural tests (NB-5), PR #139 `paths-ignore` for docs-only PRs (NB-7).
+- **Sprint 9** (2026-08-04, close-out): PR #140 CodeQL config-file via `reusable-codeql.yml` v1.1.0 (closes B26); PR #141 sync Sprint 4-9 work to `main`; PR #151 SonarCloud binding fix audit doc (deferred binding task); PR #152 §4.6 promotion governance + initial homologation audit doc; PR #153 closed (full dev history conflicted); PR #154 Path A content homologation (cherry-pick); PR #155 B27 closure docs; PR #156 final B27 closure sync to `main`.
+- **Sprint 9 — homologation** (2026-08-04, post-#156): Path 0 (force-push) declared won't-fix; Path A (squash-merge via cherry-pick) adopted as operational baseline. `git diff --stat origin/main origin/dev` = EMPTY. Backup branch `backup-main-pre-linearize` deleted early same day per user request.
