@@ -110,7 +110,7 @@ jobs:
       # that region per 02-infrastructure's design.
       # ------------------------------------------------------------------
       - name: configure-aws-credentials-oidc-deploy
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::681526276858:role/spark-match-sam-deploy-${{ inputs.environment }}
           aws-region: us-east-1
