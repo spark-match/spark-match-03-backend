@@ -1,7 +1,9 @@
 name: OIDC trust probe (throwaway)
 
 on:
-  workflow_dispatch: {}
+  pull_request:
+    branches: [dev]
+    paths: ['.github/workflows/_oidc-probe.yml']
 
 permissions:
   id-token: write
