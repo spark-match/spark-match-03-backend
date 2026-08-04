@@ -78,14 +78,24 @@ jobs:
       - name: setup-aws-sam-cli
         uses: aws-actions/setup-sam@v2
 
-      - name: install-dependencies
-        run: npm ci
-
-      - name: build-shared-workspace
-        run: npm run build:shared
-
-      - name: build-lambda-layers
-        run: npm run layer:build:all
+      # ------------------------------------------------------------------
+      # Build workspace + lambda layers via the reusable node-build from
+      # spark-match-01-devops. The recipe manages npm cache + cache-key
+      # per the v4 cache-key convention (docs/CACHE.md) and runs an
+      # optional pre-build hook (here: build:shared) before the main
+      # build script (here: layer:build:all).
+      #
+      # Replaces three inline steps (install-dependencies, build-shared,
+      # build-lambda-layers) with a single reusable call. The rest of
+      # the deploy workflow (OIDC, sam-build, sam-deploy) is unchanged.
+      # ------------------------------------------------------------------
+      - name: build-workspace-and-layers
+        uses: spark-match/spark-match-01-devops/.github/workflows/reusable-node-build.yml@main
+        with:
+          environment-name: ${{ inputs.environment }}
+          node-version: '24'
+          pre-build-script: 'build:shared'
+          build-script: 'layer:build:all'
 
       # ------------------------------------------------------------------
       # OIDC credentials: assume spark-match-sam-deploy-<env> in the
