@@ -76,7 +76,7 @@ jobs:
           cache: 'npm'
 
       - name: setup-aws-sam-cli
-        uses: aws-actions/setup-sam@v2
+        uses: aws-actions/setup-sam@v3
 
       # ------------------------------------------------------------------
       # Build workspace + lambda layers via the reusable node-build from
