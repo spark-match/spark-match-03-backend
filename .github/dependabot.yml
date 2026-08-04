@@ -3,23 +3,39 @@
 # =============================================================================
 # Enables Dependabot version updates (scheduled PRs for outdated direct
 # dependencies) on top of the security updates already enabled at the repo
-# level (Settings → Security → Dependabot security updates = enabled).
+# level (Settings -> Security -> Dependabot security updates = enabled).
 #
-# Schedule: Mondays at 06:00 UTC (before standup). Limits: 5 open PRs.
-# Groups keep related upgrades in a single PR to reduce review burden and
-# let the dev workflow handle them as one logical change.
+# Both ecosystems target `dev`, never the default branch. AGENTS.md section 4.1
+# requires every change to land on `dev` first and reach `main` only through a
+# `chore(sync)` PR; without `target-branch` Dependabot opens against the default
+# branch (`main`) and silently bypasses that rule. Same rationale as
+# spark-match-02-infrastructure/.github/dependabot.yml.
+#
+# `commit-message.prefix` keeps Dependabot commits Conventional-Commits clean so
+# they pass the commitlint gate. Backend history already uses `chore(deps)` for
+# npm and the platform uses `ci(deps)` for workflow actions.
+#
+# Schedule: Mondays 06:00 UTC (before standup).
 # =============================================================================
 
 version: 2
 updates:
+  # ---------------------------------------------------------------------------
+  # npm workspaces (root, shared, contexts/*). Lambda layers under layers/* are
+  # built separately and intentionally not tracked here.
+  # ---------------------------------------------------------------------------
   - package-ecosystem: "npm"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "06:00"
       timezone: "UTC"
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
     labels:
       - "dependencies"
     groups:
@@ -40,16 +56,46 @@ updates:
           - "patch"
         patterns:
           - "*"
-    # Major version bumps are NOT grouped — they land as separate PRs because
-    # they typically need a dedicated branch (e.g., PR #43 for vitest 2→4,
-    # PR #45 for eslint 9→10, PR #47 for typescript 5→6, PR #51 for zod 3→4).
+    # Major version bumps are NOT grouped -- they land as separate PRs because
+    # they typically need a dedicated branch (e.g., PR #43 for vitest 2->4,
+    # PR #45 for eslint 9->10, PR #47 for typescript 5->6, PR #51 for zod 3->4).
     # Reviewers should assess breaking-change scope before merging.
-    #
-    # Ignore paths we don't want Dependabot to touch (Lambda layers built
-    # separately).
     ignore:
-      - dependency-name: "*"
+      # typescript-eslint peerDeps cap typescript at <6.1.0; block TS 7+ bumps
+      # until typescript-eslint v9 ships (tracked in PR #47 follow-ups).
+      # `versions` holds constraints for the named dependency -- the previous
+      # form (`dependency-name: "*"` + `versions: ["typescript@>=7"]`) was
+      # invalid and matched nothing.
+      - dependency-name: "typescript"
         versions:
-          # typescript-eslint peerDeps cap typescript at <6.1.0; block TS 7+ bumps
-          # until typescript-eslint v9 ships (tracked in PR #47 follow-ups).
-          - "typescript@>=7"
+          - ">=7"
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions used by ci.yml / codeql.yml / deploy.yml. Previously
+  # untracked, so third-party action versions never received update PRs.
+  # Note: `spark-match/spark-match-01-devops` reusables are pinned to `@main`
+  # by policy (AGENTS.md section 10.1) and Dependabot does not track branch
+  # refs, so only third-party actions produce PRs here.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "ci"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
