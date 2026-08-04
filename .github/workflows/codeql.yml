@@ -22,7 +22,10 @@
 # Triggers:
 #   - push to main + dev       (defense in depth, upload only, no gate)
 #   - pull_request to main+dev (gate on new findings at severity >= warning)
-#   - weekly Monday 06:17 UTC  (low contention slot)
+#   - schedule: '0 8 * * *'    (daily at 08:00 UTC; low-contention slot
+#                              synced from upstream
+#                              spark-match-01-devops reusable-codeql.yml
+#                              in PR #114, 2026-08-03)
 # =============================================================================
 
 name: CodeQL
