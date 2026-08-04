@@ -588,7 +588,7 @@ Verified 2026-08-04. Fix these in scoped PRs; do not bundle them.
 
 | # | Gap | Reference |
 |---|---|---|
-| B13 | **No commitlint.** No `.commitlintrc.json`, no `commit-msg` hook, no CI job — despite §4.2 prescribing Conventional Commits. `reusable-commitlint.yml@main` covers this 100 %; `02-infrastructure` pairs it with a zero-dependency local hook and a bats drift detector. | **Closed by PR #133** (`.commitlintrc.json` added; `commitlint` job added to `ci.yml`). Still missing: local `commit-msg` husky hook. |
+| B13 | **No commitlint.** No `.commitlintrc.json`, no `commit-msg` hook, no CI job — despite §4.2 prescribing Conventional Commits. `reusable-commitlint.yml@main` covers this 100 %; `02-infrastructure` pairs it with a zero-dependency local hook and a bats drift detector. | **Closed by PRs #133 + #175** (CI commitlint job + local zero-dependency POSIX `commit-msg` husky hook that mirrors the structural rules). |
 | B15 | **No `concurrency` on `ci.yml` / `deploy.yml`.** See §5. | **Closed by PR #166** (PR-aware concurrency on ci.yml with `cancel-in-progress: true`; env-scoped concurrency on deploy.yml with `cancel-in-progress: false`). |
 | B16 | **`statusChecks: []` in the org governance manifest** — CI is not ruleset-required for this repo. Requires a devops-owned change (§11). |
 | B17 | No `CHANGELOG.md` / release automation. `reusable-release-please.yml@main` exists; `02-infrastructure` runs it with a GitHub App. Note that `chore:` sync commits deliberately do not trigger a version bump. | **Closed by PR #135** (`release-please.yml` adopted; CHANGELOG.md auto-generated). |
