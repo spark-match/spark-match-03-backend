@@ -164,10 +164,51 @@ doesn't satisfy the user's "branches must be homologated" goal.
 
 ## Decision
 
-User chose **Path 0 (admin task — deferred)**. The agent awaits the
-admin task completion. Once rules are relaxed, execute step 4 from the
-admin task list above. Update this doc with the result and close it
-out.
+User chose **Path 0 (admin task — deferred)** as the *eventual* goal but
+**Path A (squash-merge via PR)** as the *immediate* action to homologate
+content. Path 0 remains pending (B27 admin task: ruleset relaxation via
+GitHub UI). Path A is now in progress.
+
+### Approval — Path A (squash-merge dev → main)
+
+Per AGENTS.md §4.6, the agent MUST obtain explicit developer approval
+before opening or merging a `dev → main` PR.
+
+**Approval 1 (open PR)**: granted 2026-08-04 via `question` tool.
+User selected: "Sí, aprueba — homologar contenido con squash-merge".
+
+> promotion-approved-by: @ahincho on 2026-08-04 via chat
+
+**Approval 2 (merge PR)**: PENDING. Will be requested after CI passes
+and the agent re-confirms the diff.
+
+## In-progress actions
+
+1. Agent opens PR `dev → main` with squash-merge strategy.
+2. CI runs (12+ jobs from `ci.yml`; CodeQL from `codeql.yml`).
+3. Agent shows CI status to developer.
+4. **PAUSE** — agent uses `question` tool for Approval 2.
+5. If approved: merge via `gh pr merge --squash --admin --delete-branch`.
+6. Agent verifies `git diff --stat origin/main origin/dev` = EMPTY.
+7. Agent updates this audit doc with completion timestamp.
+8. Agent records `promotion-approved-by: @<handle> on YYYY-MM-DD via chat`
+   in the commit body.
+
+## Pending admin task (B27)
+
+Path 0 (force-push dev:main) still requires ruleset relaxation. The
+agent has admin permissions on the repo (`gh api /repos/.../collaborators/ahincho/permission`
+returns `admin: true`) but cannot modify org-level rulesets via the
+free-plan GitHub API. The user has accepted ownership of this task.
+
+Steps for the user (deferred):
+
+1. Open https://github.com/spark-match/spark-match-03-backend/rules
+2. Identify the ruleset that applies "no force-push + linear history + PR-only" to `main`.
+3. Either temporarily disable the ruleset, or modify it to allow force-pushes by admins.
+4. Notify the agent to execute `git push origin dev:main --force-with-lease`.
+5. Re-enable / re-tighten the ruleset.
+6. Verify post-push state: `git diff --stat origin/main origin/dev` = EMPTY, both `git log` divergence commands = EMPTY.
 
 ## Sprint 9 homologation context
 
