@@ -37,6 +37,7 @@
         "agents",
         "audit",
         "deps",
+        "deps-dev",
         "openapi",
         "auth",
         "identity",
