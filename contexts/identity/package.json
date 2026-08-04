@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.1.2",
     "node-pg-migrate": "^9.0.0",
     "typescript": "^6.0.3",
     "vitest": "^2.0.0"
