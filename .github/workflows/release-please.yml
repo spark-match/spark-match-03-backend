@@ -10,7 +10,6 @@ permissions:
 jobs:
   release-please:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-release-please.yml@main
-    with: {}
     secrets:
       release-please-app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
       release-please-app-private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
