@@ -3,6 +3,27 @@ name: CI
 on:
   pull_request:
     branches: [main, dev]
+    # NB-7: skip the full CI suite for docs-only PRs. The whole ci.yml
+    # is bypassed (no sonar, no tests, no typecheck) when ALL paths
+    # touched by the PR match this list. The list is intentionally
+    # explicit - *.md and docs/** are too broad and would silently
+    # skip CI on PRs that touch a .md plus a code file (the GH
+    # paths-ignore filter is all-or-nothing per workflow run).
+    #
+    # This filter applies to pull_request only. The push trigger fires
+    # on dev/main merges; we want CI to run there to keep SonarCloud
+    # coverage and the new-code analysis fresh on the long-lived
+    # branches regardless of which paths the merge commit touched.
+    paths-ignore:
+      - 'docs/**'
+      - 'LICENSE'
+      - 'CHANGELOG.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'AGENTS.md'
+      - '.gitignore'
+      - '.gitattributes'
   push:
     branches: [main, dev]
 
