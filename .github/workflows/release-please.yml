@@ -1,0 +1,15 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-release-please.yml@main
+    secrets:
+      release-please-app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+      release-please-app-private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}

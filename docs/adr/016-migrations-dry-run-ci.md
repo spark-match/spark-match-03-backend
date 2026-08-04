@@ -25,7 +25,7 @@ un Postgres fresco y aborte el PR si alguna falla.
 
 | Opcin | Pros | Contras |
 |---|---|---|
-| **Reusable workflow del devops repo con `postgres` service container** | Sin infraestructura nueva; matches `node-pg-migrate` real; cero credenciales AWS; idempotente | El recipe pre-existente tena bugs (tracking table default `orion_migrations`, ORDER BY id inexistente) |
+| **Reusable workflow del devops repo con `postgres` service container** | Sin infraestructura nueva; matches `node-pg-migrate` real; cero credenciales AWS; idempotente | El recipe pre-existente tenía bugs (tracking table con default heredado del proyecto legado pre-rebrand, ORDER BY id inexistente) |
 | Static analysis del SQL (regex por DROP, DELETE sin WHERE, etc.) | Sin DB; ms rpido | Falsos positivos; no detecta bugs de sequence reales (ej. INSERT que viola CHECK anterior) |
 | `node-pg-migrate --dryRun` en el Lambda handler | Reusa cdigo existente | El Lambda handler usa `MIGRATE_DATABASE_URL` (no `DATABASE_URL`); requiere un secreto en CI; no es atmico fresh-DB |
 | Round-trip (up, down, up) | Detecta problemas de reversibilidad | El 100% de las migraciones SQL actuales son one-way (no `*.down.sql`); no aporta ahora |
@@ -42,9 +42,9 @@ repo**, con las siguientes overrides:
 | `postgres-version` | `17` | `17` (default) |
 | `postgres-user` | `postgres` | `postgres` (default) |
 | `postgres-password` | `postgres` | `postgres` (default) |
-| `postgres-db` | `orion_test` | `spark_match_test` |
+| `postgres-db` | *(default heredado del proyecto legado pre-rebrand)* | `spark_match_test` |
 | `migrations-dir` | `migrations` | `migrations` (default) |
-| `migrations-table` | `orion_migrations` | **`spark_match_migrations`** (matches `node-pg-migrate` scripts en `package.json:30-34` y 001) |
+| `migrations-table` | *(default heredado del proyecto legado pre-rebrand)* | **`spark_match_migrations`** (matches `node-pg-migrate` scripts en `package.json:30-34` y 001) |
 | `migrations-schema` | `public` | `public` (default) |
 | `node-version` | `24` | `24` (default) |
 | `working-directory` | `.` | `.` (default) |

@@ -1,0 +1,54 @@
+{
+  "extends": ["@commitlint/config-conventional"],
+  "rules": {
+    "header-max-length": [2, "always", 100],
+    "body-max-line-length": [0],
+    "footer-max-line-length": [0],
+    "subject-case": [0],
+    "subject-empty": [0],
+    "type-empty": [2, "never"],
+    "scope-empty": [2, "never"],
+    "type-enum": [
+      2,
+      "always",
+      [
+        "feat",
+        "fix",
+        "chore",
+        "docs",
+        "refactor",
+        "test",
+        "build",
+        "ci",
+        "perf",
+        "revert"
+      ]
+    ],
+    "scope-enum": [
+      2,
+      "always",
+      [
+        "ci",
+        "deploy",
+        "shared",
+        "samconfig",
+        "codeql",
+        "adr",
+        "agents",
+        "audit",
+        "deps",
+        "openapi",
+        "auth",
+        "identity",
+        "infra",
+        "review",
+        "cors",
+        "repo",
+        "docs",
+        "migration",
+        "github"
+      ]
+    ]
+  },
+  "helpUrl": "https://github.com/spark-match/spark-match-03-backend/blob/main/AGENTS.md#4-pull-request-workflow"
+}
