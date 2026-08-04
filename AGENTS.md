@@ -566,7 +566,7 @@ Verified 2026-08-04. Fix these in scoped PRs; do not bundle them.
 
 | # | Issue | Evidence |
 |---|---|---|
-| B1 | `GET /v1/audit` is wired to the wrong Lambda — the `AuditApi` HttpApi event is nested under `IdentityUpdateUserFunction.Events`, so the route resolves to `update-user.handler`. `IdentityAuditFunction` has no `Events:` block. | `contexts/identity/template.yaml:333-345` vs `452-471` |
+| B1 | `GET /v1/audit` is wired to the wrong Lambda — the `AuditApi` HttpApi event is nested under `IdentityUpdateUserFunction.Events`, so the route resolves to `update-user.handler`. `IdentityAuditFunction` has no `Events:` block. | `contexts/identity/template.yaml:333-345` vs `452-471` | **Closed by PR #167** (AuditApi event moved to IdentityAuditFunction.Events). |
 | B2 | `Type: HttpApi::Auth` is not a valid SAM/CloudFormation resource type. | `contexts/identity/template.yaml:394` |
 | B3 | `sam deploy --config-env dev` / `staging` will fail — `samconfig.toml` only defines `[default]` and `[prod]`. | `deploy.yml:10,49` vs `samconfig.toml:3,31` |
 | B4 | `CorsAllowedOrigins` is `!Ref`-ed in the nested identity stack but never declared as a parameter there, and the root stack never passes it. | `contexts/identity/template.yaml:42` vs `7-25`; `template.yaml:139-145` |
@@ -589,7 +589,7 @@ Verified 2026-08-04. Fix these in scoped PRs; do not bundle them.
 | # | Gap | Reference |
 |---|---|---|
 | B13 | **No commitlint.** No `.commitlintrc.json`, no `commit-msg` hook, no CI job — despite §4.2 prescribing Conventional Commits. `reusable-commitlint.yml@main` covers this 100 %; `02-infrastructure` pairs it with a zero-dependency local hook and a bats drift detector. | **Closed by PR #133** (`.commitlintrc.json` added; `commitlint` job added to `ci.yml`). Still missing: local `commit-msg` husky hook. |
-| B15 | **No `concurrency` on `ci.yml` / `deploy.yml`.** See §5. |
+| B15 | **No `concurrency` on `ci.yml` / `deploy.yml`.** See §5. | **Closed by PR #166** (PR-aware concurrency on ci.yml with `cancel-in-progress: true`; env-scoped concurrency on deploy.yml with `cancel-in-progress: false`). |
 | B16 | **`statusChecks: []` in the org governance manifest** — CI is not ruleset-required for this repo. Requires a devops-owned change (§11). |
 | B17 | No `CHANGELOG.md` / release automation. `reusable-release-please.yml@main` exists; `02-infrastructure` runs it with a GitHub App. Note that `chore:` sync commits deliberately do not trigger a version bump. | **Closed by PR #135** (`release-please.yml` adopted; CHANGELOG.md auto-generated). |
 | B18 | No `CONTRIBUTING.md`, `LICENSE`, or `SECURITY.md` at root — CODEOWNERS and the README both reference them. | **Closed by PR #137** (all 3 governance docs added; LICENSE = Apache-2.0). |
