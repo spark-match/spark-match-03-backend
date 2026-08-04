@@ -67,6 +67,49 @@ jobs:
       eslint-version: 10
       lint-script: lint
 
+  # SPRINT 6 - node-typecheck: catches TypeScript regressions at PR time.
+  # Inline job (NOT a reusable) because reusable-node-typecheck.yml from
+  # spark-match-01-devops does not expose a pre-typecheck-script input,
+  # and this monorepo requires `npm run build:shared` before `tsc --noEmit`
+  # (the @spark-match/shared/* imports resolve via npm-workspace symlink
+  # to shared/dist, which is built by build:shared). Without build:shared,
+  # typecheck fails with "Cannot find module '@spark-match/shared/infra'".
+  # See AGENTS.md §3 and §8 for the path-alias resolution rule.
+  #
+  # What would change to migrate to the reusable:
+  #   - 01-devops adds `pre-typecheck-script` input to reusable-node-typecheck.yml
+  #     (analogous to the `pre-build-script` input on reusable-node-build.yml).
+  #   - Out of scope here per AGENTS.md §11 (we do not modify devops recipes).
+  #
+  # The build:shared step relies on the fix shipped in PR #130 (shared
+  # build script -> 'tsc -b --force'). Without that fix, the build step
+  # silently no-ops on a clean runner and the typecheck step fails.
+  node-typecheck:
+    name: "node-typecheck-ci"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup-node-js-24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: install-dependencies
+        run: npm ci
+
+      # Build @spark-match/shared first so its .d.ts files are available
+      # via the shared workspace symlink. See shared/package.json exports
+      # map and the AGENTS.md §8 "path-alias resolution" rule.
+      - name: build-shared-workspace
+        run: npm run build:shared
+
+      - name: run-typecheck
+        run: npm run typecheck
+
   gitleaks:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-gitleaks.yml@main
     with:
