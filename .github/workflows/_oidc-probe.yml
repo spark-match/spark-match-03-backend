@@ -13,6 +13,13 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
+      - name: decode-oidc-token-claims
+        run: |
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          PAYLOAD=$(echo "$TOKEN" | cut -d. -f2)
+          PADDED=$(printf '%s' "$PAYLOAD" | tr '_-' '/+')
+          case $((${#PADDED} % 4)) in 2) PADDED="${PADDED}==";; 3) PADDED="${PADDED}=";; esac
+          echo "$PADDED" | base64 -d | jq '{sub, aud, repository, repository_owner_id, repository_id, ref, environment, event_name}'
       - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::681526276858:role/spark-match-sam-deploy-dev
