@@ -31,7 +31,7 @@ const __dirname = dirname(__filename);
 export function jsonSchemaFor(schema: z.ZodType): Record<string, unknown> {
   return z.toJSONSchema(schema, {
     target: 'jsonSchema7',
-  }) as Record<string, unknown>;
+  });
 }
 
 function parametersFor(op: Operation): unknown[] | undefined {
