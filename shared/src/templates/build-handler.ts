@@ -150,7 +150,7 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
   const applyHeaders = (request: middy.Request<APIGatewayProxyEventV2, APIGatewayProxyResultV2>): void => {
     if (request.response === undefined || request.response === null) return;
     const resp = asResponse(request.response);
-    const headers = (resp.headers ?? {}) as Record<string, string>;
+    const headers = (resp.headers ?? {});
     // Compute the dynamic allow-origin from the request's Origin header
     const requestOrigin = request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
     const allowOrigin = selectAllowOrigin(requestOrigin, CORS_ALLOWED_ORIGINS);
@@ -183,7 +183,7 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
           statusCode: 204,
           headers: preflightHeaders,
           body: '',
-        } as unknown as APIGatewayProxyResultV2;
+        };
       }
     },
     after: async (request) => {
@@ -250,8 +250,5 @@ export function buildHandler<TInput, TOutput>(
 
   pipeline.use(httpErrorHandler());
 
-  return pipeline as unknown as middy.MiddyfiedHandler<
-    APIGatewayProxyEventV2,
-    APIGatewayProxyResultV2
-  >;
+  return pipeline;
 }
