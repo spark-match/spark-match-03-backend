@@ -244,11 +244,12 @@ conceptually wrong reason, had to be re-opened and re-dismissed. Derived hard ru
 - "It's a false positive" is not a justification — state *why* the flagged path is unreachable or safe.
 - The only routine acceptable dismissal is a stale duplicate of an alert already fixed.
 
-> **Known standing alert:** `actions/unpinned-tag` on `.github/workflows/deploy.yml`. It is a false
-> positive *relative to documented platform policy* — §12.1 mandates `@vN` tags and forbids SHA
-> pinning. `01-devops` excludes this exact rule for itself; this repo cannot, because
+> **Known standing alert:** `actions/unpinned-tag` on `.github/workflows/deploy.yml`. The detection is
+> *technically correct* — `@v2` is a mutable tag — but it is an **accepted risk**, not a false
+> positive: §12.1 deliberately mandates `@vN` and forbids SHA pinning so that patch updates flow
+> automatically. `01-devops` excludes this exact rule for itself; this repo cannot, because
 > `reusable-codeql.yml` does not expose the `config-file` input its own header documents.
-> Tracked as **B26**. Do not "fix" it by SHA-pinning the action.
+> Dismissed as `won't fix`. Tracked as **B26**. Do not "fix" it by SHA-pinning the action.
 
 ---
 
