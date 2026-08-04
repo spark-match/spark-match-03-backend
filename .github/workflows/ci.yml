@@ -110,6 +110,21 @@ jobs:
       - name: run-typecheck
         run: npm run typecheck
 
+  # SPRINT 6 - node-test: runs vitest as a dedicated PR gate.
+  # Uses reusable-node-test.yml from spark-match-01-devops. The recipe
+  # exposes a pre-test-script input, but we leave it empty because
+  # vitest uses vite-tsconfig-paths to resolve @spark-match/shared/*
+  # to shared/src directly (no shared/dist build required for tests).
+  # The sonar job continues to run vitest with --coverage to produce
+  # the LCOV report for SonarCloud. This job produces fast test-only
+  # feedback (~30s) without the cost of running coverage again.
+  node-test:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-node-test.yml@main
+    with:
+      environment-name: 'ci'
+      node-version: '24'
+      test-script: 'test'
+
   gitleaks:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-gitleaks.yml@main
     with:
