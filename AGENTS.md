@@ -535,7 +535,6 @@ Verified 2026-08-03. Fix these in scoped PRs; do not bundle them.
 | # | Gap | Reference |
 |---|---|---|
 | B13 | **No commitlint.** No `.commitlintrc.json`, no `commit-msg` hook, no CI job — despite §4.2 prescribing Conventional Commits. `reusable-commitlint.yml@main` covers this 100 %; `02-infrastructure` pairs it with a zero-dependency local hook and a bats drift detector. |
-| B14 | **Dependabot targets the default branch.** `.github/dependabot.yml` has no `target-branch: dev`, so its PRs land against `main`, bypassing the §4.1 rule. It also lacks a `commit-message.prefix` (`ci(deps)`) and a `github-actions` ecosystem entry — workflow action versions are currently untracked. |
 | B15 | **No `concurrency` on `ci.yml` / `deploy.yml`.** See §5. |
 | B16 | **`statusChecks: []` in the org governance manifest** — CI is not ruleset-required for this repo. Requires a devops-owned change (§11). |
 | B17 | No `CHANGELOG.md` / release automation. `reusable-release-please.yml@main` exists; `02-infrastructure` runs it with a GitHub App. Note that `chore:` sync commits deliberately do not trigger a version bump. |
