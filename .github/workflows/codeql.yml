@@ -57,5 +57,12 @@ jobs:
       languages: 'javascript,actions'
       build-mode: 'none'
       queries-pack: 'security-extended'
+      # B26: forward the local codeql config to the reusable. The
+      # config (.github/codeql/codeql-config.yml) excludes the two
+      # `unpinned-tag` rules that conflict with AGENTS.md 12.1
+      # (floating @vN tags). Without this, every PR that touches a
+      # workflow emits a standing alert. The reusable's input was
+      # added in 01-devops PR #290 (release v1.1.0).
+      config-file: '.github/codeql/codeql-config.yml'
       fail-on-alerts: true
       fail-on-severity: 'warning'
