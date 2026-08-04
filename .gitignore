@@ -62,3 +62,4 @@ layers/*/*.zip
 /.husky/_/
 !/.husky/pre-commit
 !/.husky/pre-push
+!/.husky/commit-msg
