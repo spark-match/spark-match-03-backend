@@ -49,16 +49,16 @@
   "dependencies": {
     "@aws-lambda-powertools/logger": "^2.10.0",
     "@aws-lambda-powertools/parameters": "^2.10.0",
-    "@aws-sdk/client-ssm": "^3.665.0",
+    "@aws-sdk/client-ssm": "^3.1101.0",
     "@aws-lambda-powertools/tracer": "^2.10.0",
-    "@aws-sdk/client-eventbridge": "^3.665.0",
-    "@aws-sdk/client-secrets-manager": "^3.665.0",
-    "jose": "^6.2.4",
+    "@aws-sdk/client-eventbridge": "^3.1101.0",
+    "@aws-sdk/client-secrets-manager": "^3.1101.0",
+    "jose": "^6.2.6",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.1.2",
     "typescript": "^6.0.3"
   }
 }
