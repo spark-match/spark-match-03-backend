@@ -244,6 +244,12 @@ conceptually wrong reason, had to be re-opened and re-dismissed. Derived hard ru
 - "It's a false positive" is not a justification — state *why* the flagged path is unreachable or safe.
 - The only routine acceptable dismissal is a stale duplicate of an alert already fixed.
 
+> **Known standing alert:** `actions/unpinned-tag` on `.github/workflows/deploy.yml`. It is a false
+> positive *relative to documented platform policy* — §12.1 mandates `@vN` tags and forbids SHA
+> pinning. `01-devops` excludes this exact rule for itself; this repo cannot, because
+> `reusable-codeql.yml` does not expose the `config-file` input its own header documents.
+> Tracked as **B26**. Do not "fix" it by SHA-pinning the action.
+
 ---
 
 ## 7. SonarCloud gotchas
@@ -534,6 +540,7 @@ Verified 2026-08-03. Fix these in scoped PRs; do not bundle them.
 | B17 | No `CHANGELOG.md` / release automation. `reusable-release-please.yml@main` exists; `02-infrastructure` runs it with a GitHub App. Note that `chore:` sync commits deliberately do not trigger a version bump. |
 | B18 | No `CONTRIBUTING.md`, `LICENSE`, or `SECURITY.md` at root — CODEOWNERS and the README both reference them. |
 | B19 | ESLint uses `tseslint.configs.recommended` without `parserOptions.project`, so type-aware rules SonarCloud may flag are not caught locally. |
+| B26 | **Standing CodeQL alert #4, `actions/unpinned-tag` on `deploy.yml:32`** (`aws-actions/setup-sam@v2`, ref `refs/heads/main`). It contradicts §12.1, which mandates `@vN` and forbids SHA-pinning. `01-devops` suppresses the identical rule for itself in `.github/codeql/codeql-config.yml`, but this repo cannot: `reusable-codeql.yml` **documents** a `config-file:` input in its header (line 55) yet never declares it in `workflow_call.inputs` (lines 73-97). Correct fix, in order: (1) devops adds the missing `config-file` input; (2) this repo adds `.github/codeql/codeql-config.yml` excluding `actions/unpinned-tag` + `js/actions/unpinned-3rd-party-action` and passes it. Step 1 is out of scope per §11. **Never resolve this by SHA-pinning.** |
 
 ### Documentation drift
 
