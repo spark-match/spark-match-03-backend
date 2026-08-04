@@ -23,6 +23,10 @@ Parameters:
     Type: CommaDelimitedList
     Default: ''
     Description: Comma-separated list of security group IDs (for VPC-attached Lambdas).
+  CorsAllowedOrigins:
+    Type: CommaDelimitedList
+    Default: '*'
+    Description: Comma-separated list of allowed CORS origins (forwarded from root stack).
 
 Globals:
   Function:
@@ -374,16 +378,29 @@ Resources:
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
-  # HttpApi::Auth resource - reusable Authorizer reference. Routes opt in
+  # HttpApi Lambda Authorizer - reusable Authorizer reference. Routes opt in
   # with `Auth: { Authorizer: !Ref IdentityAuthorizer }`.
   IdentityAuthorizer:
-    Type: HttpApi::Auth
+    Type: AWS::ApiGatewayV2::Authorizer
     Properties:
       ApiId: !Ref HttpApiId
       AuthorizerType: REQUEST
+      AuthorizerPayloadFormatVersion: '2.0'
       AuthorizerResultTtlInSeconds: 0
-      Identity:
-        Fn::GetAtt: [IdentityAuthorizerFunction, Arn]
+      IdentitySource:
+        - $request.header.Authorization
+      AuthorizerUri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IdentityAuthorizerFunction.Arn}/invocations'
+
+  # Allow API Gateway to invoke the authorizer Lambda. Required when the
+  # authorizer is declared as AWS::ApiGatewayV2::Authorizer (SAM would
+  # otherwise auto-create this permission for inline Auth events).
+  IdentityAuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref IdentityAuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApiId}/*'
 
   # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
