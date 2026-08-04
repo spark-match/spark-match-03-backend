@@ -35,7 +35,8 @@ stack_name = "spark-match-backend-dev"
 s3_bucket = "spark-match-sam-artifacts-dev"
 s3_prefix = "spark-match-backend"
 region = "us-east-1"
-confirm_changeset = true
+# CI (deploy.yml) corre sin TTY: un prompt de confirmacion colgaria el job.
+confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 disable_rollback = false
 resolve_s3 = true
@@ -54,7 +55,8 @@ stack_name = "spark-match-backend-staging"
 s3_bucket = "spark-match-sam-artifacts-staging"
 s3_prefix = "spark-match-backend"
 region = "us-east-1"
-confirm_changeset = true
+# CI (deploy.yml) corre sin TTY: un prompt de confirmacion colgaria el job.
+confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 disable_rollback = false
 resolve_s3 = true
@@ -72,7 +74,8 @@ parameter_overrides = [
 stack_name = "spark-match-backend-prod"
 s3_bucket = "spark-match-sam-artifacts-prod"
 region = "us-east-1"
-confirm_changeset = true
+# CI (deploy.yml) corre sin TTY: un prompt de confirmacion colgaria el job.
+confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 disable_rollback = true
 resolve_s3 = true
