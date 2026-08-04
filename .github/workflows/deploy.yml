@@ -67,16 +67,16 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: setup-node-js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'npm'
 
       - name: setup-aws-sam-cli
-        uses: aws-actions/setup-sam@v2
+        uses: aws-actions/setup-sam@v3
 
       # ------------------------------------------------------------------
       # Build workspace + lambda layers via the reusable node-build from
@@ -110,7 +110,7 @@ jobs:
       # that region per 02-infrastructure's design.
       # ------------------------------------------------------------------
       - name: configure-aws-credentials-oidc-deploy
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::681526276858:role/spark-match-sam-deploy-${{ inputs.environment }}
           aws-region: us-east-1
