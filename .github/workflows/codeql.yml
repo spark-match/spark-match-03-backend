@@ -4,7 +4,7 @@
 # CodeQL - Static analysis for security vulnerabilities
 # =============================================================================
 # Caller wrapper for the reusable workflow in spark-match-01-devops:
-#   spark-match/spark-match-01-devops/.github/workflows/codeql.yml@main
+#   spark-match/spark-match-01-devops/.github/workflows/reusable-codeql.yml@main
 #
 # Languages scanned: javascript (covers TypeScript) + actions (YAML).
 # Query pack: security-extended (more coverage than default `security`,
