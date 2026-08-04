@@ -17,10 +17,37 @@ name: spark-match-03-backend-codeql-config
 # from "by bats test" to "by bats + codeql config" so the two
 # defenses are stacked.
 #
-# Filters are merged into the `security-extended` queries pack already
-# configured in .github/workflows/codeql.yml. The exclusions do not
-# touch any rule that would affect production code scanning.
+# Note (2026-08-04): the original `query-filters: - exclude: id:` syntax
+# (matching the official GitHub docs example) was confirmed to be parsed
+# by codeql-action/init@v4.37.4 + CodeQL CLI v2.26.2 (logs show
+# `query-filters: - exclude: - exclude:` being echoed back from the
+# resolved config), BUT the excluded queries still get evaluated, which
+# emits the SARIF result and creates the GitHub alert. This was
+# reproduced on spark-match-01-devops (21 standing alerts) and
+# spark-match-03-backend (3 alerts) with the same syntax.
+#
+# Workaround applied in this file: declare the query suite explicitly
+# in the config (`queries: - uses: security-extended`) so the action
+# loads the suite definition from this config file rather than the
+# workflow's `queries:` input. The workflow's `queries:` input then
+# gets ignored per docs ("any additional packs or queries specified in
+# your workflow are used instead of those specified in the configuration
+# file"), and the `query-filters: - exclude:` block here is the only
+# source of truth. The `+` prefix in the workflow is NOT added because
+# we want to override, not append (per docs prefix docs above).
+#
+# The defense at the repo level is `tests/bats/no-sha-pinning.bats`
+# (PR #138), which rejects SHA-pinned uses in workflows. That is the
+# operative control; this CodeQL config is best-effort.
 # =============================================================================
+
+queries:
+  # Declare the security-extended suite from the config file itself.
+  # Without this line, the workflow's `queries: security-extended`
+  # input takes precedence and bypasses our `query-filters` excludes
+  # (observed empirically on 2026-08-04 across this repo and
+  # spark-match-01-devops).
+  - uses: security-extended
 
 query-filters:
   - exclude:
