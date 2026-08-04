@@ -1,3 +1,50 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Spark Match
+# =============================================================================
+# Deploy - Manual SAM deploy to AWS via OIDC
+# =============================================================================
+# Inline workflow (NOT a reusable) on purpose. This is one of the few callers
+# that needs AWS credentials and therefore cannot delegate to a generic
+# reusable node-build (which does not assume an IAM role). The reusable
+# `reusable-node-build.yml` from spark-match-01-devops is consumed elsewhere
+# (spark-match-04-frontend) for non-AWS callers.
+#
+# Why inline (per AGENTS.md §12.2):
+#   - Each SAM-deploying repo has a different role ARN prefix pinned by env.
+#   - The `sam deploy --config-env` flag invokes `samconfig.toml` blocks that
+#     are caller-specific (bucket name, stack name, parameter overrides).
+#   - The OIDC trust chain is per-repo (sub claim pins repo:owner/name).
+#   Consolidating into a reusable would require N inputs that vary per caller
+#   (role ARN pattern, stack name, bucket prefix, region), defeating the
+#   goal of reuse. The level of variance is too high to template cleanly.
+#   What WOULD change to make this a reusable: a generic "sam-deploy" recipe
+#   taking inputs {aws-region, role-arn-pattern, stack-name, parameter-overrides}.
+#   Out of scope for this PR; tracked in docs/ci-cd-improvement-plan.md.
+#
+# Authentication:
+#   - OIDC trust: assume role `spark-match-sam-deploy-${{ inputs.environment }}`
+#     in account 681526276858. The role is created by
+#     spark-match-02-infrastructure/modules/oidc-github (Fase 1, applied).
+#   - Trust policy restricts `sub` claim to:
+#     repo:spark-match/spark-match-03-backend:{ref:refs/heads/{dev,main} | environment:${{ inputs.environment }}}.
+#     See spark-match-02-infrastructure/docs/IAM_ROLES.md §"spark-match-sam-deploy-{env}".
+#   - The `environment: ${{ inputs.environment }}` job-level binding below
+#     produces the `environment:<env>` sub pattern, which is the strictest
+#     of the three accepted matchers.
+#
+# Required GH Environments (created 2026-08-04 via `gh api`):
+#   - dev: deployment_branch_policy.custom_branch_policies=true (any branch)
+#   - production: deployment_branch_policy.protected_branches=true (main only)
+#   These were created in PR #128 / commit
+#   <GH_ENV creation is a pre-flight of this PR, not a code change>.
+#
+# Why not a reusable from spark-match-01-devops:
+#   - The reusable-sam-deploy.yml that would have been the natural fit was
+#     DELETED in the stale-reusable cleanup (PR #201/#202 in 01-devops;
+#     see 01-devops/AGENTS.md §11). Re-introducing it would require a
+#     platform-team PR in 01-devops, out of scope here.
+# =============================================================================
+
 name: Deploy
 
 on:
@@ -25,20 +72,48 @@ jobs:
       - name: setup-node-js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: setup-aws-sam-cli
         uses: aws-actions/setup-sam@v2
 
-      - name: install-dependencies
-        run: npm ci
+      # ------------------------------------------------------------------
+      # Build workspace + lambda layers via the reusable node-build from
+      # spark-match-01-devops. The recipe manages npm cache + cache-key
+      # per the v4 cache-key convention (docs/CACHE.md) and runs an
+      # optional pre-build hook (here: build:shared) before the main
+      # build script (here: layer:build:all).
+      #
+      # Replaces three inline steps (install-dependencies, build-shared,
+      # build-lambda-layers) with a single reusable call. The rest of
+      # the deploy workflow (OIDC, sam-build, sam-deploy) is unchanged.
+      # ------------------------------------------------------------------
+      - name: build-workspace-and-layers
+        uses: spark-match/spark-match-01-devops/.github/workflows/reusable-node-build.yml@main
+        with:
+          environment-name: ${{ inputs.environment }}
+          node-version: '24'
+          pre-build-script: 'build:shared'
+          build-script: 'layer:build:all'
 
-      - name: build-shared-workspace
-        run: npm run build:shared
-
-      - name: build-lambda-layers
-        run: npm run layer:build:all
+      # ------------------------------------------------------------------
+      # OIDC credentials: assume spark-match-sam-deploy-<env> in the
+      # 681526276858 AWS account. The role is created by
+      # 02-infrastructure/modules/oidc-github (Fase 1 applied to dev).
+      # The role ARN is computed inline from inputs.environment so this
+      # file does not depend on a per-env repo var that would drift
+      # between dev / staging / prod.
+      #
+      # aws-region is fixed to us-east-1; the SAM artifacts bucket,
+      # all KMS keys, all VPCs, and the SAM-deploy role are scoped to
+      # that region per 02-infrastructure's design.
+      # ------------------------------------------------------------------
+      - name: configure-aws-credentials-oidc-deploy
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::681526276858:role/spark-match-sam-deploy-${{ inputs.environment }}
+          aws-region: us-east-1
 
       - name: sam-build
         run: sam build --use-container

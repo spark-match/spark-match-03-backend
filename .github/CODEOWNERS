@@ -12,24 +12,60 @@
 # Paths criticos (governance): @spark-match/product-owners
 #
 # Convencion: explicit paths, no catch-all.
+# Cada path del repo debe estar listado explicitamente. Si se crea un
+# path nuevo, agregarlo en el mismo PR que introduce el file.
+# GitHub acumula code owners de TODAS las reglas que matchean, asi
+# que un path explicitamente listado bajo /devops tambien matchea si
+# hay un catch-all `*`. Por eso no usamos catch-all.
 
-/decisions/                                @spark-match/product-owners
-/onboarding/                               @spark-match/product-owners
-/postmortems/                              @spark-match/product-owners
-/README.md                                 @spark-match/backend-devs @spark-match/product-owners
-/CONTRIBUTING.md                           @spark-match/backend-devs @spark-match/product-owners
-/LICENSE                                   @spark-match/backend-devs @spark-match/product-owners
+# -----------------------------------------------------------------------------
+# Governance docs (dual-owned: devops + product-owners)
+# -----------------------------------------------------------------------------
+/README.md                                   @spark-match/backend-devs @spark-match/product-owners
+/LICENSE                                     @spark-match/backend-devs @spark-match/product-owners
+/CONTRIBUTING.md                             @spark-match/backend-devs @spark-match/product-owners
+/SECURITY.md                                 @spark-match/backend-devs @spark-match/product-owners
+/CHANGELOG.md                                @spark-match/backend-devs @spark-match/product-owners
+/AGENTS.md                                   @spark-match/backend-devs @spark-match/product-owners
 
-/.github/                                  @spark-match/backend-devs
-/scripts/                                  @spark-match/backend-devs
-/contexts/                                 @spark-match/backend-devs
-/docs/                                     @spark-match/backend-devs
-/layers/                                   @spark-match/backend-devs
-/migrations/                               @spark-match/backend-devs
-/shared/                                   @spark-match/backend-devs
-/tests/                                    @spark-match/backend-devs
+# -----------------------------------------------------------------------------
+# Governance manifest + configuration files at the root
+# -----------------------------------------------------------------------------
+/.gitignore                                  @spark-match/backend-devs
+/.gitattributes                               @spark-match/backend-devs
+/.yamllint.yml                               @spark-match/backend-devs
+/.commitlintrc.json                          @spark-match/backend-devs
+/.release-please-manifest.json               @spark-match/backend-devs
 
-/.eslintrc.cjs                             @spark-match/backend-devs
-/.prettierrc                               @spark-match/backend-devs
-/samconfig.toml                            @spark-match/backend-devs
-/template.yaml                             @spark-match/backend-devs
+# -----------------------------------------------------------------------------
+# CI/CD - .github/ (workflows, CODEOWNERS, dependabot, PR templates,
+# release-please config, codeql config)
+# -----------------------------------------------------------------------------
+/.github/                                    @spark-match/backend-devs
+
+# -----------------------------------------------------------------------------
+# Source code (workspaces + layers + scripts + tests + docs)
+# -----------------------------------------------------------------------------
+/contexts/                                   @spark-match/backend-devs
+/shared/                                     @spark-match/backend-devs
+/layers/                                     @spark-match/backend-devs
+/scripts/                                    @spark-match/backend-devs
+/tests/                                      @spark-match/backend-devs
+/migrations/                                 @spark-match/backend-devs
+/docs/                                       @spark-match/backend-devs
+
+# -----------------------------------------------------------------------------
+# Tooling configuration (TypeScript, ESLint flat config, Vitest)
+# -----------------------------------------------------------------------------
+/package.json                                @spark-match/backend-devs
+/package-lock.json                           @spark-match/backend-devs
+/tsconfig.json                               @spark-match/backend-devs
+/tsconfig.base.json                          @spark-match/backend-devs
+/eslint.config.mjs                           @spark-match/backend-devs
+/vitest.config.mts                           @spark-match/backend-devs
+
+# -----------------------------------------------------------------------------
+# SAM deployment template + config
+# -----------------------------------------------------------------------------
+/template.yaml                               @spark-match/backend-devs
+/samconfig.toml                              @spark-match/backend-devs

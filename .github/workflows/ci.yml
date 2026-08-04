@@ -3,6 +3,27 @@ name: CI
 on:
   pull_request:
     branches: [main, dev]
+    # NB-7: skip the full CI suite for docs-only PRs. The whole ci.yml
+    # is bypassed (no sonar, no tests, no typecheck) when ALL paths
+    # touched by the PR match this list. The list is intentionally
+    # explicit - *.md and docs/** are too broad and would silently
+    # skip CI on PRs that touch a .md plus a code file (the GH
+    # paths-ignore filter is all-or-nothing per workflow run).
+    #
+    # This filter applies to pull_request only. The push trigger fires
+    # on dev/main merges; we want CI to run there to keep SonarCloud
+    # coverage and the new-code analysis fresh on the long-lived
+    # branches regardless of which paths the merge commit touched.
+    paths-ignore:
+      - 'docs/**'
+      - 'LICENSE'
+      - 'CHANGELOG.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'AGENTS.md'
+      - '.gitignore'
+      - '.gitattributes'
   push:
     branches: [main, dev]
 
@@ -66,6 +87,82 @@ jobs:
       node-version: '24'
       eslint-version: 10
       lint-script: lint
+
+  # SPRINT 6 - node-typecheck: catches TypeScript regressions at PR time.
+  # Inline job (NOT a reusable) because reusable-node-typecheck.yml from
+  # spark-match-01-devops does not expose a pre-typecheck-script input,
+  # and this monorepo requires `npm run build:shared` before `tsc --noEmit`
+  # (the @spark-match/shared/* imports resolve via npm-workspace symlink
+  # to shared/dist, which is built by build:shared). Without build:shared,
+  # typecheck fails with "Cannot find module '@spark-match/shared/infra'".
+  # See AGENTS.md §3 and §8 for the path-alias resolution rule.
+  #
+  # What would change to migrate to the reusable:
+  #   - 01-devops adds `pre-typecheck-script` input to reusable-node-typecheck.yml
+  #     (analogous to the `pre-build-script` input on reusable-node-build.yml).
+  #   - Out of scope here per AGENTS.md §11 (we do not modify devops recipes).
+  #
+  # The build:shared step relies on the fix shipped in PR #130 (shared
+  # build script -> 'tsc -b --force'). Without that fix, the build step
+  # silently no-ops on a clean runner and the typecheck step fails.
+  node-typecheck:
+    name: "node-typecheck-ci"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup-node-js-24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: install-dependencies
+        run: npm ci
+
+      # Build @spark-match/shared first so its .d.ts files are available
+      # via the shared workspace symlink. See shared/package.json exports
+      # map and the AGENTS.md §8 "path-alias resolution" rule.
+      - name: build-shared-workspace
+        run: npm run build:shared
+
+      - name: run-typecheck
+        run: npm run typecheck
+
+  # SPRINT 6 - node-test: runs vitest as a dedicated PR gate.
+  # Uses reusable-node-test.yml from spark-match-01-devops. The recipe
+  # exposes a pre-test-script input, but we leave it empty because
+  # vitest uses vite-tsconfig-paths to resolve @spark-match/shared/*
+  # to shared/src directly (no shared/dist build required for tests).
+  # The sonar job continues to run vitest with --coverage to produce
+  # the LCOV report for SonarCloud. This job produces fast test-only
+  # feedback (~30s) without the cost of running coverage again.
+  node-test:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-node-test.yml@main
+    with:
+      environment-name: 'ci'
+      node-version: '24'
+      test-script: 'test'
+
+  # SPRINT 6 - commitlint: enforces Conventional Commits on PR commits.
+  # Closes B13. Uses reusable-commitlint.yml from spark-match-01-devops.
+  # Evaluates the PR's commit subjects (default depth: 2) against the
+  # local .commitlintrc.json. help-url points to AGENTS.md §4.2 so
+  # failure messages direct contributors to the project's commit
+  # conventions.
+  #
+  # NOT enabling post-merge `commitlint-main` required check (which
+  # 01-devops uses in PR #276): a single-author project with admin
+  # bypass for merge means the post-merge check has no incremental
+  # catch value beyond what the PR-side check already provides.
+  # Revisit when a second CODEOWNER exists.
+  commitlint:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-commitlint.yml@main
+    with:
+      help-url: 'https://github.com/spark-match/spark-match-03-backend/blob/main/AGENTS.md#4-pull-request-workflow'
+      skip-release-please: true
 
   gitleaks:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-gitleaks.yml@main
