@@ -143,6 +143,7 @@ Resources:
         NodeRuntimeLayerArn: !Ref NodeRuntimeLayer
         VpcSubnetIds: !Ref VpcSubnetIds
         VpcSecurityGroupIds: !Ref VpcSecurityGroupIds
+        CorsAllowedOrigins: !Ref CorsAllowedOrigins
       Tags:
         - Key: Project
           Value: spark-match
