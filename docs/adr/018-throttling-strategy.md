@@ -1,6 +1,6 @@
 # ADR-018: Throttling strategy (Edge + Per-IP + Per-account)
 
-**Estado**: Propuesto · **Fecha**: 2026-07-31 (revisado 2026-07-31: rename "Layer 1/2/3" → "Edge / Per-IP / Per-account")
+**Estado**: Aceptado · **Fecha**: 2026-07-31 (revisado 2026-07-31: rename "Layer 1/2/3" → "Edge / Per-IP / Per-account"; revisado 2026-08-04: marcado Aceptado tras implementación de Edge throttling en `contexts/identity/template.yaml`)
 
 > Discusión originada en sesión sobre maduración del Identity context (2026-07-31). El usuario preguntó si, dado que todo el tráfico pasa por API Gateway, el rate limit no debería ir ahí. Respuesta corta: **sí para el grueso (Edge throttling)**, **no para brute force / per-user (Per-account lockout)**. Este ADR formaliza la estrategia de 3 mecanismos con naming descriptivo (no "Layer N", que no comunica qué hace cada uno).
 
