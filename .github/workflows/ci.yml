@@ -141,6 +141,7 @@ jobs:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-commitlint.yml@main
     with:
       help-url: 'https://github.com/spark-match/spark-match-03-backend/blob/main/AGENTS.md#4-pull-request-workflow'
+      skip-release-please: true
 
   gitleaks:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-gitleaks.yml@main
