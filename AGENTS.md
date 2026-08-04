@@ -1,18 +1,20 @@
 ﻿# AGENTS.md — Spark Match Backend (spark-match-03-backend)
 
 > Working agreement for AI agents (and humans) contributing to this repo.
-> Last updated: **2026-08-03** — cross-repo audit against `spark-match-01-devops` (`@7913515`, v1.0.0)
-> and `spark-match-02-infrastructure` (`@7e588bb`, v1.0.0). Section §12 numbering is preserved
-> because sibling repos link to it.
+> Last updated: **2026-08-04** — added §4.6 promotion governance (explicit developer approval
+> required before any `dev → main` action). Cross-repo audit against `spark-match-01-devops`
+> (`@7913515`, v1.0.0) and `spark-match-02-infrastructure` (`@7e588bb`, v1.0.0). Section §12
+> numbering is preserved because sibling repos link to it.
 
 ## 0. The 10-second version
 
 1. **Branch off `dev`.** Never commit directly to `dev` or `main`.
-2. **Every check must be green before merge.** No exceptions outside §4.5.
-3. Before pushing: `npm ci && npm run build:shared && npm run typecheck && npm run lint && npm run test:coverage`.
-4. **New file ⇒ new test in the same PR.** Untested new code lowers coverage *and* the QG blocks on `new_coverage < 80`.
-5. **0 new code smells.** One MINOR smell is enough to red the gate.
-6. Open/keep security alerts (CodeQL, Dependabot) = **P0, merge-blocking** (§6).
+2. **Promotion to `main` requires explicit developer approval (§4.6).** Agent proposes; developer disposes. Default state is NO.
+3. **Every check must be green before merge.** No exceptions outside §4.5.
+4. Before pushing: `npm ci && npm run build:shared && npm run typecheck && npm run lint && npm run test:coverage`.
+5. **New file ⇒ new test in the same PR.** Untested new code lowers coverage *and* the QG blocks on `new_coverage < 80`.
+6. **0 new code smells.** One MINOR smell is enough to red the gate.
+7. Open/keep security alerts (CodeQL, Dependabot) = **P0, merge-blocking** (§6).
 
 ---
 
@@ -102,6 +104,7 @@ Git Bash they will not fire — run the guardrail block above manually before `g
 5. Wait for **all** CI jobs green (§5) — including the PR-level SonarCloud QG.
 6. CODEOWNERS approval (`.github/CODEOWNERS` → `@spark-match/backend-devs`). Authors cannot self-approve, even as code owners.
 7. **Squash merge** (enforced by the org ruleset). Delete the branch.
+8. **Branching always starts from `dev`** — never from `main`. This keeps `main` as a release branch with a linear, auditable history (Path 0 / Path 1 model in §4.3).
 
 ### 4.2 Commit and PR-title conventions
 
@@ -114,11 +117,26 @@ Conventional Commits: `<type>(<scope>): <subject>` — lower-case subject, no tr
 > gh pr edit <num> --title "fix(ci): correct subject"
 > ```
 
-### 4.3 `dev` → `main` sync
+### 4.3 `dev` → `main` promotion (homologation model)
 
-The sync is a dedicated chore PR: `chore(sync): dev -> main (<context>)`.
+**Promotion to `main` is gated by mandatory explicit developer approval (§4.6).** Agents **propose**; developers **dispose**. The default state is **NO** — silence is not consent.
 
-**Sync when — and only when:**
+The repo ruleset currently enforces three rules that together shape the homologation model:
+1. PR-only changes to `main`.
+2. No force-push to `main`.
+3. Linear history required (no merge commits on `main`).
+
+**Three promotion paths, in order of preference:**
+
+| Path | Method | Topological homologation | Requires admin task? |
+|---|---|---|---|
+| **Path 0** | `git push origin dev:main --force-with-lease` after temporarily relaxing ruleset | ✅ Perfect (main == dev) | ✅ Yes — admin must relax ruleset |
+| **Path 1** | Rebase-merge via PR (`git rebase origin/main`, drop merge commits, rebase-merge) | ⚠️ Partial (main = linearized dev; dev retains merge commits) | ❌ No |
+| **Path A** | Squash-merge via PR (status quo pre-Sprint 9) | ❌ Content-only (topology diverges by design) | ❌ No |
+
+**Current state (2026-08-04):** Path 0 is the preferred homologation path but requires an admin task (ruleset relaxation) that the user has accepted ownership of. The agent awaits completion. See `docs/audits/main-homologation-2026-08-04.md` for diagnostic, fallback steps, and admin task checklist.
+
+**Promote when — and only when:**
 
 | Trigger | Category |
 |---|---|
@@ -127,28 +145,28 @@ The sync is a dedicated chore PR: `chore(sync): dev -> main (<context>)`.
 | Critical operational hotfix | Explicit decision |
 | Planned production release | Explicit decision |
 
-**Do NOT sync:**
+**Do NOT promote:**
 
 - After every `dev` PR (that is not what `main` is for).
-- Without explicit `dev` sign-off.
+- Without explicit developer approval (§4.6) — agent asks via the `question` tool.
 - While **any** check is red or **any** CodeQL / Dependabot / GHAS alert is open.
+- Without running §4.4 post-promotion verification.
 
-> If in doubt, do not sync.
+> If in doubt, do not promote.
 
-### 4.4 Post-sync verification (mandatory)
+### 4.4 Post-promotion verification (mandatory)
 
 ```bash
 git fetch origin
 git diff --stat origin/main origin/dev   # expected: EMPTY
 ```
 
-- **Non-empty ⇒ `main` lost changes.** Stop and open a corrective sync PR.
-- `git log origin/main..origin/dev` showing dozens of commits is **expected** with squash-based
-  syncs and is **not** drift. Only the content diff is authoritative.
+- **Non-empty ⇒ `main` lost changes OR `dev` is ahead.** Stop and investigate.
+- **Path 0 expectation:** `git log origin/main..origin/dev --oneline` returns EMPTY and `git log origin/dev..origin/main --oneline` returns EMPTY after homologation. Topology and content are aligned.
+- **Path 1 expectation:** `git log origin/dev..origin/main --oneline` returns EMPTY (main is an ancestor of dev's linearized form). `git log origin/main..origin/dev` shows the granular commits.
+- **Path A expectation:** `git log` divergence is expected and is NOT drift — only the content diff is authoritative. Documented here for historical reference; not the default post-Sprint 9.
 
-> **Live example (2026-08-03):** `git diff --stat origin/main origin/dev` returns
-> `template.yaml | 2 +-` — `main` still carries a UTF-8 BOM that PR #119 stripped on `dev`.
-> This is exactly what the check is for. Tracked in §13.
+> **Live example (2026-08-03, pre-homologation):** `git diff --stat origin/main origin/dev` returned `template.yaml | 2 +-` — `main` still carried a UTF-8 BOM that PR #119 stripped on `dev`. This was the trigger for the homologation effort in §13.
 
 ### 4.5 Admin-bypass policy
 
@@ -161,15 +179,39 @@ Bypass is permitted **only when all three** hold:
 Bypass is **forbidden** when: any check FAILED; any CodeQL / Dependabot / GHAS alert is open; there
 is a coverage gap; or the only stated reason is "urgent".
 
-The one standing exception: a `chore(sync): dev -> main` PR may bypass the **SonarCloud QG** when the
-underlying feature PRs each passed individually — the QG measures *new* code per PR and a squash sync
-introduces none. All other checks must still be green, and the bypass must still be documented.
+**The one standing exception** (Path A only): a `chore(sync): dev -> main` PR may bypass the **SonarCloud QG** when the underlying feature PRs each passed individually — the QG measures *new* code per PR and a squash sync introduces none. All other checks must still be green, and the bypass must still be documented.
 
-Commit-body format actually in use across the platform:
+**Path 0 promotion (force-push):** does NOT use this bypass. Force-pushes to `main` are gated by §4.6 (explicit developer approval) and the org ruleset's force-push toggle. The agent must record `promotion-approved-by: @<handle>` in both the PR description (if a PR is involved) and the audit doc.
+
+### 4.6 Promotion governance — explicit developer approval
+
+Promoting changes from `dev` to `main` is the highest-risk action in this repo's workflow. It is gated by **mandatory human approval**:
+
+1. **Before opening the promotion PR (or executing the force-push)**, the agent uses the `question` tool to confirm the developer wants the promotion to proceed. The default state is **NO**. Silence, ambiguity, or "later" all count as "not approved".
+2. **Before merging the promotion PR (or completing the force-push)**, the agent confirms the developer has reviewed the diff and authorized the merge. The approval is recorded in the audit doc (`docs/audits/`) and in the commit body:
+   ```
+   promotion-approved-by: @<handle> on YYYY-MM-DD via chat
+   ```
+3. **All three promotion paths are gated by this rule** — Path 0, Path 1, and Path A. Even Path A's trivial sync PRs require approval.
+4. **Force-pushes to `main` are permitted ONLY via Path 0** with: (a) admin rule relaxation recorded in audit doc, (b) explicit developer approval per §4.6 rule 1, (c) backup branch created pre-push (e.g., `backup-main-pre-<reason>`).
+5. **If `main` ends up in a bad state**, the corrective action is a reverse PR (`chore(sync): main → dev`) or a new feature PR — never an unapproved force-push.
+6. **Backup branch lifecycle:** the `backup-main-pre-*` branch created before any destructive main update must be retained for at least 30 days post-promotion, then deleted only after the new topology is confirmed.
+
+This rule supersedes any "agent-driven" tone elsewhere in §4. The agent **proposes**; the developer **disposes**.
+
+### Commit-body format conventions
+
+**Admin-bypass format** (§4.5):
 
 ```
 admin-bypass: 14 checks SUCCESS + 1 SKIPPING. <why the skip is benign>.
 reviewDecision=REVIEW_REQUIRED sin reviewer. Autor @<handle> responsable.
+```
+
+**Promotion-approval format** (§4.6):
+
+```
+promotion-approved-by: @<handle> on YYYY-MM-DD via chat
 ```
 
 ---
@@ -506,7 +548,13 @@ to three existing recipes. Recommendation: `reusar` all three. `gitleaks` requir
 
 ## 13. Known drift and backlog
 
-Verified 2026-08-03. Fix these in scoped PRs; do not bundle them.
+Verified 2026-08-04. Fix these in scoped PRs; do not bundle them.
+
+### Admin tasks (deferred — requires platform-team intervention)
+
+| # | Task | Status | Refs |
+|---|---|---|---|
+| **B27** | **Modify GitHub ruleset to allow force-push to `main` for admins** (relax "no force-push" + "linear history" + "PR-only" rules temporarily). Required for Path 0 homologation. User accepted ownership on 2026-08-04. | **Pending admin task** | `docs/audits/main-homologation-2026-08-04.md`, backup branch `backup-main-pre-linearize` |
 
 ### Correctness (fix first)
 
