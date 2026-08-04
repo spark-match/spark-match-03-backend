@@ -1,0 +1,43 @@
+name: spark-match-03-backend-codeql-config
+
+# CodeQL config for spark-match-03-backend.
+# =============================================================================
+# Excludes the two `unpinned-tag` rules that conflict with the platform
+# AGENTS.md 12.1 convention (floating @vN tags, never SHA-pinned) when
+# applied to a consumer repo. spark-match-01-devops/AGENTS.md 5.1
+# mandates the same policy and excludes the rules for itself in
+# .github/codeql/codeql-config.yml; this file mirrors the exclusion for
+# backend callers.
+#
+# spark-match-03-backend does NOT have a bats no-sha-pinning policy of
+# its own (the structural tests added in PR #138 do, but CodeQL needs
+# its own config because the `unpinned-tag` rules are visual findings
+# that would otherwise be reported on every PR touching a workflow).
+# The PR adding this config (B26) ALSO promotes the rule coverage
+# from "by bats test" to "by bats + codeql config" so the two
+# defenses are stacked.
+#
+# Filters are merged into the `security-extended` queries pack already
+# configured in .github/workflows/codeql.yml. The exclusions do not
+# touch any rule that would affect production code scanning.
+# =============================================================================
+
+query-filters:
+  - exclude:
+      id: js/actions/unpinned-3rd-party-action
+      reason: >
+        Repository contains no JavaScript or TypeScript source consumed
+        as a 3rd-party action; the rule produces no actionable findings
+        and emits noise on every workflow change. Floating @vN tags
+        (per AGENTS.md 12.1) are the canonical pin shape for this
+        repo and are separately enforced by tests/bats/no-sha-pinning.bats.
+  - exclude:
+      id: actions/unpinned-tag
+      reason: >
+        Per AGENTS.md 12.1: third-party actions are pinned by @vN
+        (major-floating) or @N.N.N (exact version). SHA-pinning is
+        explicitly avoided so patch updates flow automatically. The
+        same rule is enforced by tests/bats/no-sha-pinning.bats, which
+        rejects any SHA-pinned uses in workflows. The CodeQL query
+        is duplicated enforcement of the same invariant and would
+        open a standing alert on every third-party action we use.
