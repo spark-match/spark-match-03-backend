@@ -65,9 +65,11 @@ beforeEach(() => {
   mockedSend.mockReset();
 
   mockedSsm.mockImplementation(async (name: string) => {
-    if (name === '/spark-match/eventbridge/bus-arn') return 'arn:aws:events:us-east-1:111:bus/spark';
-    if (name === '/spark-match/secret/jwt-arn') return JWT_ARN;
-    if (name === '/spark-match/db/secret-arn') return DB_ARN;
+    if (name === '/spark-match/dev/config/eventbridge-bus-arn') {
+      return 'arn:aws:events:us-east-1:111:bus/spark';
+    }
+    if (name === '/spark-match/dev/config/jwt-secret-arn') return JWT_ARN;
+    if (name === '/spark-match/dev/config/db-secret-arn') return DB_ARN;
     return undefined;
   });
   mockedSend.mockImplementation(async (cmd: { input: { SecretId: string } }) => {
@@ -118,8 +120,21 @@ describe('buildContext', () => {
     await buildContext();
 
     const names = mockedSsm.mock.calls.map((c) => c[0]);
-    expect(names).toContain('/spark-match/eventbridge/bus-arn');
-    expect(names).toContain('/spark-match/secret/jwt-arn');
+    expect(names).toContain('/spark-match/dev/config/eventbridge-bus-arn');
+    expect(names).toContain('/spark-match/dev/config/jwt-secret-arn');
+  });
+
+  it('reads every parameter under the ADR-0002 prefix of the current environment', async () => {
+    // Guarda contra una regresion al esquema legacy (/spark-match/secret/...,
+    // /spark-match/eventbridge/...), que no existe en ninguna cuenta AWS.
+    const buildContext = await loadFreshComposition();
+    await buildContext();
+
+    const names = mockedSsm.mock.calls.map((c) => c[0] as string);
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(name).toMatch(/^\/spark-match\/dev\/config\//);
+    }
   });
 
   it('returns the same singleton on repeat calls (no SSM/Secrets re-fetch)', async () => {
