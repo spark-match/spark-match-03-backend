@@ -601,12 +601,28 @@ Resources:
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
-  # El authorizer y su AWS::Lambda::Permission los genera SAM a partir de
+  # El AWS::ApiGatewayV2::Authorizer lo genera SAM a partir de
   # HttpApi.Auth.Authorizers.IdentityAuthorizer (ver el bloque Auth del
-  # recurso HttpApi). Declararlos a mano aca era lo que rompia el transform:
+  # recurso HttpApi). Declararlo a mano era lo que rompia el transform:
   # `Auth.Authorizer` de un evento HttpApi tiene que nombrar una entrada de
-  # ese mapa, no apuntar por !Ref a un recurso crudo. Las rutas siguen
-  # optando por el con `Auth: { Authorizer: IdentityAuthorizer }`.
+  # ese mapa, no apuntar por !Ref a un recurso crudo. Las rutas optan por el
+  # con `Auth: { Authorizer: IdentityAuthorizer }`.
+  #
+  # La AWS::Lambda::Permission, en cambio, SI hay que declararla: para
+  # authorizers de HttpApi, SAM no la crea (si lo hace para las funciones de
+  # cada ruta, y para authorizers de Api REST). Verificado contra el stack
+  # desplegado: get-me tenia su permission auto-generada
+  # (...IdentityGetMeFunctionGetMeApiPermission...) y el authorizer no tenia
+  # resource policy alguna, asi que API Gateway no podia invocarlo y toda
+  # ruta protegida devolvia 500 sin dejar rastro en CloudWatch (la Lambda
+  # nunca llegaba a ejecutarse).
+  IdentityAuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref IdentityAuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
 
   # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
