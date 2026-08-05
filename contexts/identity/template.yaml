@@ -88,9 +88,18 @@ Resources:
       # el transform aborta con
       #   The method authorizer must be a string with a corresponding dict
       #   entry in the api authorizer
-      # Sin DefaultAuthorizer a proposito: /v1/auth/register y /v1/auth/login
-      # son publicos.
+      # Cerrado por defecto: toda ruta nace protegida y las publicas se abren
+      # una por una con `Auth: { Authorizer: NONE }`. Antes era al reves (sin
+      # DefaultAuthorizer, cada ruta protegida opt-in), lo que funcionaba pero
+      # dejaba que una ruta nueva naciera abierta si alguien olvidaba el bloque
+      # Auth. Es tambien lo que exige cloudformation:S6333 ("AWS API Gateway
+      # should require authentication"), que marcaba este recurso como
+      # vulnerabilidad BLOCKER en SonarCloud.
+      #
+      # Hoy el efecto es identico: las mismas 2 rutas publicas y las mismas 8
+      # protegidas. Lo que cambia es cual es el default.
       Auth:
+        DefaultAuthorizer: IdentityAuthorizer
         Authorizers:
           IdentityAuthorizer:
             FunctionArn: !GetAtt IdentityAuthorizerFunction.Arn
@@ -222,6 +231,10 @@ Resources:
             Path: /v1/auth/register
             Method: POST
             # Throttling en HttpApi.RouteSettings ('POST /v1/auth/register').
+            # Publica a proposito: no se puede pedir un token teniendo que
+            # presentar uno. NONE anula el DefaultAuthorizer del HttpApi.
+            Auth:
+              Authorizer: NONE
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -262,6 +275,9 @@ Resources:
             Path: /v1/auth/login
             Method: POST
             # Throttling en HttpApi.RouteSettings ('POST /v1/auth/login').
+            # Publica a proposito, igual que register.
+            Auth:
+              Authorizer: NONE
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
