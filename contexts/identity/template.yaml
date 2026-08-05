@@ -194,6 +194,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -228,6 +234,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -262,6 +274,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -297,6 +315,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -332,6 +356,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -367,6 +397,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -402,6 +438,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -437,6 +479,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -472,6 +520,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -516,6 +570,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
@@ -607,6 +667,12 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
         OutExtension:
           - .js=.mjs
         Target: node24
