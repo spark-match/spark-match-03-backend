@@ -11,7 +11,11 @@ confirm_changeset = true
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 image_repositories = []
 disable_rollback = false
-resolve_s3 = true
+# Sin `resolve_s3`: es mutuamente excluyente con `s3_bucket` fuera de un deploy
+# guiado, y `sam deploy` aborta con
+#   Cannot use both --resolve-s3 and --s3-bucket parameters in non-guided deployments
+# El bucket lo crea Terraform (modules/storage-sam-artifacts), asi que la fuente
+# de verdad es `s3_bucket`, no el bucket que SAM se inventaria.
 resolve_image_repos = true
 save_params = true
 template_file = "template.yaml"
@@ -39,7 +43,8 @@ region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 disable_rollback = false
-resolve_s3 = true
+# Ver el comentario de [default.deploy.parameters]: `resolve_s3` choca con
+# `s3_bucket` en deploys no guiados.
 resolve_image_repos = true
 save_params = true
 template_file = "template.yaml"
@@ -66,7 +71,8 @@ region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 disable_rollback = true
-resolve_s3 = true
+# Ver el comentario de [default.deploy.parameters]: `resolve_s3` choca con
+# `s3_bucket` en deploys no guiados.
 resolve_image_repos = true
 save_params = true
 template_file = "template.yaml"
