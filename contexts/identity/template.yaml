@@ -82,6 +82,44 @@ Resources:
         ExposeHeaders:
           - X-Correlation-Id
         MaxAge: 600
+      # El authorizer se declara aca, no como AWS::ApiGatewayV2::Authorizer
+      # suelto: el evento HttpApi de SAM espera en `Auth.Authorizer` el NOMBRE
+      # (string) de una entrada de este mapa. Con un `!Ref` a un recurso crudo,
+      # el transform aborta con
+      #   The method authorizer must be a string with a corresponding dict
+      #   entry in the api authorizer
+      # Sin DefaultAuthorizer a proposito: /v1/auth/register y /v1/auth/login
+      # son publicos.
+      Auth:
+        Authorizers:
+          IdentityAuthorizer:
+            FunctionArn: !GetAtt IdentityAuthorizerFunction.Arn
+            AuthorizerPayloadFormatVersion: '2.0'
+            EnableSimpleResponses: true
+            # 0 = sin cache. El handler necesita ver revocaciones de rol al
+            # instante; el authorizer resuelve en ~10 ms.
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 0
+      # Throttling por ruta. En HTTP API v2 vive en el stage (RouteSettings),
+      # no en el evento: `ThrottleSettings` solo existe para el tipo Api (REST)
+      # y el transform lo rechaza con
+      #   property ThrottleSettings not defined for resource of type HttpApi
+      # Las claves son route keys "<METHOD> <path>". Limites de ADR-018.
+      RouteSettings:
+        'POST /v1/auth/register':
+          # anti-bot signup
+          ThrottlingRateLimit: 5
+          ThrottlingBurstLimit: 10
+        'POST /v1/auth/login':
+          # anti-brute-force IP-level
+          ThrottlingRateLimit: 5
+          ThrottlingBurstLimit: 10
+        'GET /v1/audit':
+          # query costosa: cursor pagination + joins a identity.audit_log
+          ThrottlingRateLimit: 20
+          ThrottlingBurstLimit: 40
       Tags:
         Project: spark-match
         Environment: !Ref Environment
@@ -177,10 +215,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/auth/register
             Method: POST
-            # Edge throttling override: anti-bot signup (ADR-018).
-            ThrottleSettings:
-              RateLimit: 5.0
-              BurstLimit: 10
+            # Throttling en HttpApi.RouteSettings ('POST /v1/auth/register').
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -214,10 +249,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/auth/login
             Method: POST
-            # Edge throttling override: anti-brute-force IP-level (ADR-018).
-            ThrottleSettings:
-              RateLimit: 5.0
-              BurstLimit: 10
+            # Throttling en HttpApi.RouteSettings ('POST /v1/auth/login').
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -252,7 +284,7 @@ Resources:
             Path: /v1/users/me
             Method: GET
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -287,7 +319,7 @@ Resources:
             Path: /v1/users/me
             Method: PATCH
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -322,7 +354,7 @@ Resources:
             Path: /v1/users/me/password
             Method: PUT
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -357,7 +389,7 @@ Resources:
             Path: /v1/users
             Method: GET
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -392,7 +424,7 @@ Resources:
             Path: /v1/users/{userId}/activate
             Method: POST
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -427,7 +459,7 @@ Resources:
             Path: /v1/users/{userId}/deactivate
             Method: POST
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -462,7 +494,7 @@ Resources:
             Path: /v1/users/{userId}
             Method: PATCH
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -509,29 +541,12 @@ Resources:
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
-  # HttpApi Lambda Authorizer - reusable Authorizer reference. Routes opt in
-  # with `Auth: { Authorizer: !Ref IdentityAuthorizer }`.
-  IdentityAuthorizer:
-    Type: AWS::ApiGatewayV2::Authorizer
-    Properties:
-      ApiId: !Ref HttpApi
-      AuthorizerType: REQUEST
-      AuthorizerPayloadFormatVersion: '2.0'
-      AuthorizerResultTtlInSeconds: 0
-      IdentitySource:
-        - $request.header.Authorization
-      AuthorizerUri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IdentityAuthorizerFunction.Arn}/invocations'
-
-  # Allow API Gateway to invoke the authorizer Lambda. Required when the
-  # authorizer is declared as AWS::ApiGatewayV2::Authorizer (SAM would
-  # otherwise auto-create this permission for inline Auth events).
-  IdentityAuthorizerPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref IdentityAuthorizerFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+  # El authorizer y su AWS::Lambda::Permission los genera SAM a partir de
+  # HttpApi.Auth.Authorizers.IdentityAuthorizer (ver el bloque Auth del
+  # recurso HttpApi). Declararlos a mano aca era lo que rompia el transform:
+  # `Auth.Authorizer` de un evento HttpApi tiene que nombrar una entrada de
+  # ese mapa, no apuntar por !Ref a un recurso crudo. Las rutas siguen
+  # optando por el con `Auth: { Authorizer: IdentityAuthorizer }`.
 
   # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
@@ -613,13 +628,9 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/audit
             Method: GET
-            # Edge throttling override: query costosa (cursor pagination +
-            # joins a identity.audit_log). ADR-018.
-            ThrottleSettings:
-              RateLimit: 20.0
-              BurstLimit: 40
+            # Throttling en HttpApi.RouteSettings ('GET /v1/audit').
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: !Sub 'identity-audit-${Environment}'
