@@ -17,7 +17,8 @@
 // en CI.
 //
 // Este script corre ANTES de `sam build`, desde la raiz del workspace, donde
-// todo resuelve. Deja el artefacto listo en contexts/identity/.build/migrate/
+// si resuelven las rutas y los paquetes. Deja el artefacto listo en
+// contexts/identity/.build/migrate/
 // y el Makefile se limita a copiarlo -- una operacion que si sobrevive al
 // scratch dir porque la carpeta viaja dentro del CodeUri.
 // =============================================================================
