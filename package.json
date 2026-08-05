@@ -11,6 +11,7 @@
   "scripts": {
     "build": "sam build",
     "build:shared": "npm run build --workspace=@spark-match/shared",
+    "bundle:migrate": "node scripts/bundle-migrate.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

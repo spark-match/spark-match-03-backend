@@ -129,6 +129,13 @@ jobs:
       # la version sea la que fija package-lock.json (0.28.1) y no una
       # flotante que cambie entre corridas.
       # ------------------------------------------------------------------
+      # IdentityMigrateFunction se empaqueta antes de `sam build`, desde la
+      # raiz del workspace. Su Makefile solo copia el resultado: el
+      # CustomMakeBuilder de SAM corre make en un scratch dir donde no hay
+      # node_modules ni `../../`, asi que ahi esbuild no resolveria nada.
+      - name: bundle-migrate-function
+        run: npm run bundle:migrate
+
       - name: expose-esbuild-on-path
         run: |
           set -euo pipefail
