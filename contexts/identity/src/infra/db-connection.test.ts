@@ -60,7 +60,7 @@ describe('getDbConnection', () => {
     const db = await getDbConnection();
 
     expect(db).toBeDefined();
-    expect(mockedSsm).toHaveBeenCalledWith('/spark-match/db/secret-arn', {
+    expect(mockedSsm).toHaveBeenCalledWith('/spark-match/dev/config/db-secret-arn', {
       maxAge: 300,
       throwOnError: false,
     });
@@ -79,6 +79,7 @@ describe('getDbConnection', () => {
       password: string;
       application_name: string;
       max: number;
+      ssl: { rejectUnauthorized: boolean };
     };
     expect(config.host).toBe(DB_CREDENTIALS.host);
     expect(config.port).toBe(DB_CREDENTIALS.port);
@@ -87,6 +88,15 @@ describe('getDbConnection', () => {
     expect(config.password).toBe(DB_CREDENTIALS.password);
     expect(config.application_name).toBe('spark-match-backend');
     expect(config.max).toBe(5);
+  });
+
+  it('enables TLS on the pool (RDS PostgreSQL 15+ rejects unencrypted connections)', async () => {
+    await getDbConnection();
+
+    const config = mockedPoolCtor.mock.calls[0]![0] as {
+      ssl?: { rejectUnauthorized: boolean };
+    };
+    expect(config.ssl).toEqual({ rejectUnauthorized: false });
   });
 
   it('returns the cached connection on subsequent calls without re-fetching', async () => {

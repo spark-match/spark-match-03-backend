@@ -12,6 +12,7 @@ import { createLogger } from '@spark-match/shared/logger';
 import { createEventBridgeClient, type EventPublisher } from '@spark-match/shared/events';
 import {
   createSsmReader,
+  ssmConfigPath,
   withAwsErrorMapping,
   type SsmReader,
 } from '@spark-match/shared/infra';
@@ -28,8 +29,12 @@ import { createUserService, type UserService } from './service/user-service.js';
 import { createAuditService, type AuditService } from './service/audit-service.js';
 import { createJwtSigner, type JwtSigner } from './infra/jwt-signer.js';
 
-const SSM_BUS_ARN_KEY = '/spark-match/eventbridge/bus-arn';
-const SSM_JWT_SECRET_ARN_KEY = '/spark-match/secret/jwt-arn';
+// Claves del contrato cross-repo de ADR-0002. El path completo lo arma
+// ssmConfigPath() en el momento de la llamada, no al importar el modulo:
+// asi el prefijo /spark-match/{env}/config/ sale de la env var ENVIRONMENT
+// que inyecta SAM, y dev nunca puede leer configuracion de prod.
+const SSM_BUS_ARN_KEY = 'eventbridge-bus-arn';
+const SSM_JWT_SECRET_ARN_KEY = 'jwt-secret-arn';
 
 export interface IdentityContext {
   logger: ReturnType<typeof createLogger>;
@@ -59,12 +64,12 @@ export async function buildContext(): Promise<IdentityContext> {
     const ssm = createSsmReader();
 
     const busArn = await withAwsErrorMapping('SSM', () =>
-      ssm.getRequiredString(SSM_BUS_ARN_KEY),
+      ssm.getRequiredString(ssmConfigPath(SSM_BUS_ARN_KEY)),
     );
     const eventPublisher = createEventBridgeClient({ busArn });
 
     const jwtSecretArn = await withAwsErrorMapping('SSM', () =>
-      ssm.getRequiredString(SSM_JWT_SECRET_ARN_KEY),
+      ssm.getRequiredString(ssmConfigPath(SSM_JWT_SECRET_ARN_KEY)),
     );
     const jwtSigner = createJwtSigner({ secretArn: jwtSecretArn });
 

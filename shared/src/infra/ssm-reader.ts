@@ -17,6 +17,7 @@ const DEPENDENCY = 'SSM';
 export interface SsmReader {
   getString(name: string, maxAge?: number): Promise<string | undefined>;
   getRequiredString(name: string, maxAge?: number): Promise<string>;
+  getRequiredSecureString(name: string, maxAge?: number): Promise<string>;
   invalidate(name?: string): void;
 }
 
@@ -38,6 +39,29 @@ export function createSsmReader(defaultMaxAge = DEFAULT_MAX_AGE_SECONDS): SsmRea
 
     async getRequiredString(name: string, maxAge = defaultMaxAge): Promise<string> {
       const value = await this.getString(name, maxAge);
+      if (value === undefined) {
+        throw ApiError.internal(`Required SSM parameter not found or empty: ${name}`);
+      }
+      return value;
+    },
+
+    // Separado de getRequiredString por el `decrypt: true`: sin el, SSM
+    // devuelve el ciphertext base64 de un SecureString en vez del valor. No
+    // reusa getString por la misma razon -- ese metodo NO descifra a
+    // proposito, para que un parametro no sensible nunca pague el
+    // kms:Decrypt.
+    async getRequiredSecureString(name: string, maxAge = defaultMaxAge): Promise<string> {
+      let value: string | undefined;
+      try {
+        value = await getParameter(name, {
+          maxAge,
+          decrypt: true,
+          throwOnError: false,
+        });
+      } catch (err) {
+        if (err instanceof ApiError) throw err;
+        throw ApiError.awsUnavailable(DEPENDENCY, err);
+      }
       if (value === undefined) {
         throw ApiError.internal(`Required SSM parameter not found or empty: ${name}`);
       }
