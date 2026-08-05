@@ -8,9 +8,6 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-  HttpApiId:
-    Type: String
-    Description: HTTP API Gateway ID (from root stack)
   NodeSharedLayerArn:
     Type: String
   NodeRuntimeLayerArn:
@@ -54,6 +51,47 @@ Conditions:
   HasVpcConfig: !Not [!Equals [!Join ['', !Ref VpcSubnetIds], '']]
 
 Resources:
+  # ===========================================================================
+  # API Gateway HTTP API v2
+  # ===========================================================================
+  # La API vive en ESTE stack, no en el raiz, por una restriccion dura del
+  # transform de SAM: el event source `HttpApi` exige que `ApiId` referencie un
+  # recurso AWS::Serverless::HttpApi del MISMO template. Pasarlo como parametro
+  # String desde el stack padre hacia fallar el transform con
+  # "ApiId must be a valid reference to an 'AWS::Serverless::HttpApi' resource
+  # in same template" en las 10 funciones con ruta HTTP -- no solo en
+  # `sam build`, sino tambien al crear el change set, porque el error lo emite
+  # el transform y no el CLI.
+  #
+  # El stack raiz re-exporta HttpApiUrl y HttpApiId desde los outputs de este
+  # stack, asi que los consumidores externos no ven el cambio.
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: !Sub 'Spark Match Backend API (${Environment})'
+      CorsConfiguration:
+        AllowOrigins: !Ref CorsAllowedOrigins
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        ExposeHeaders:
+          - X-Correlation-Id
+        MaxAge: 600
+      Tags:
+        Project: spark-match
+        Environment: !Ref Environment
+
   IdentityRegisterLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -116,7 +154,7 @@ Resources:
         RegisterApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/auth/register
             Method: POST
             # Edge throttling override: anti-bot signup (ADR-018).
@@ -147,7 +185,7 @@ Resources:
         LoginApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/auth/login
             Method: POST
             # Edge throttling override: anti-brute-force IP-level (ADR-018).
@@ -174,7 +212,7 @@ Resources:
         GetMeApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/me
             Method: GET
             Auth:
@@ -199,7 +237,7 @@ Resources:
         UpdateProfileApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/me
             Method: PATCH
             Auth:
@@ -224,7 +262,7 @@ Resources:
         ChangePasswordApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/me/password
             Method: PUT
             Auth:
@@ -249,7 +287,7 @@ Resources:
         ListUsersApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users
             Method: GET
             Auth:
@@ -274,7 +312,7 @@ Resources:
         ActivateUserApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/activate
             Method: POST
             Auth:
@@ -301,7 +339,7 @@ Resources:
         DeactivateUserApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/deactivate
             Method: POST
             Auth:
@@ -328,7 +366,7 @@ Resources:
         UpdateUserApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/{userId}
             Method: PATCH
             Auth:
@@ -383,7 +421,7 @@ Resources:
   IdentityAuthorizer:
     Type: AWS::ApiGatewayV2::Authorizer
     Properties:
-      ApiId: !Ref HttpApiId
+      ApiId: !Ref HttpApi
       AuthorizerType: REQUEST
       AuthorizerPayloadFormatVersion: '2.0'
       AuthorizerResultTtlInSeconds: 0
@@ -400,7 +438,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref IdentityAuthorizerFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApiId}/*'
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
 
   # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
@@ -463,7 +501,7 @@ Resources:
         AuditApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/audit
             Method: GET
             # Edge throttling override: query costosa (cursor pagination +
@@ -512,3 +550,10 @@ Outputs:
     Value: !GetAtt IdentityAuthorizerFunction.Arn
   IdentityMigrateFunctionArn:
     Value: !GetAtt IdentityMigrateFunction.Arn
+
+  HttpApiUrl:
+    Description: HTTP API Gateway endpoint URL
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  HttpApiId:
+    Description: HTTP API Gateway ID
+    Value: !Ref HttpApi

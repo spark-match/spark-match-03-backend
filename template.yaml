@@ -77,36 +77,6 @@ Globals:
 
 Resources:
   # ===========================================================================
-  # API Gateway HTTP API v2
-  # ===========================================================================
-  HttpApi:
-    Type: AWS::Serverless::HttpApi
-    Properties:
-      StageName: !Ref Environment
-      Description: !Sub 'Spark Match Backend API (${Environment})'
-      CorsConfiguration:
-        AllowOrigins: !Split [',', !Ref CorsAllowedOrigins]
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - PATCH
-          - DELETE
-          - OPTIONS
-        AllowHeaders:
-          - Content-Type
-          - Authorization
-          - X-Amz-Date
-          - X-Api-Key
-          - X-Amz-Security-Token
-        ExposeHeaders:
-          - X-Correlation-Id
-        MaxAge: 600
-      Tags:
-        Project: spark-match
-        Environment: !Ref Environment
-
-  # ===========================================================================
   # Lambda Layers (built from layers/ directory)
   # ===========================================================================
   NodeSharedLayer:
@@ -138,7 +108,6 @@ Resources:
       TemplateURL: ./contexts/identity/template.yaml
       Parameters:
         Environment: !Ref Environment
-        HttpApiId: !Ref HttpApi
         NodeSharedLayerArn: !Ref NodeSharedLayer
         NodeRuntimeLayerArn: !Ref NodeRuntimeLayer
         VpcSubnetIds: !Ref VpcSubnetIds
@@ -167,15 +136,19 @@ Resources:
           Value: !Ref Environment
 
 Outputs:
+  # Re-exportados desde el stack anidado: la API se define alli por una
+  # restriccion del transform de SAM (ver el comentario en
+  # contexts/identity/template.yaml). Los nombres de export NO cambian, asi
+  # que ningun consumidor externo se entera del movimiento.
   HttpApiUrl:
     Description: HTTP API Gateway endpoint URL
-    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Value: !GetAtt IdentityStack.Outputs.HttpApiUrl
     Export:
       Name: !Sub 'spark-match-${Environment}-HttpApiUrl'
 
   HttpApiId:
     Description: HTTP API Gateway ID
-    Value: !Ref HttpApi
+    Value: !GetAtt IdentityStack.Outputs.HttpApiId
     Export:
       Name: !Sub 'spark-match-${Environment}-HttpApiId'
 
