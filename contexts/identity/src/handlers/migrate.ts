@@ -140,8 +140,8 @@ export const handler = async (input: unknown): Promise<MigrateOutput> => {
     // migrations/, un deploy limpio quedaba a medio migrar salvo que
     // alguien se acordara de invocarla 4 veces.
     //
-    // `down` SI conserva count: 1: revertir todo el historial de un golpe
-    // ante un `{"direction":"down"}` sin argumentos borraria el schema
+    // `down` SI conserva count: 1: revertir el historial completo de un
+    // golpe ante un `{"direction":"down"}` sin argumentos borraria el schema
     // entero. Un rollback profundo se hace invocando varias veces, a
     // proposito.
     const result = (await runner({

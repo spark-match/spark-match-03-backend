@@ -15,7 +15,7 @@
 #
 # En su lugar, `npm run bundle:migrate` (scripts/bundle-migrate.mjs) deja el
 # artefacto listo en .build/migrate/ ANTES de `sam build`, corriendo desde la
-# raiz del workspace donde todo resuelve. Esta receta solo lo copia: .build/
+# raiz del workspace donde si resuelve. Esta receta solo lo copia: .build/
 # vive dentro del CodeUri, asi que viaja en la copia al scratch dir.
 #
 # SAM invoca `make build-<LogicalId>` con ARTIFACTS_DIR apuntando al directorio
