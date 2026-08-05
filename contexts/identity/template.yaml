@@ -8,10 +8,11 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-  NodeSharedLayerArn:
-    Type: String
-  NodeRuntimeLayerArn:
-    Type: String
+  LogRetentionInDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 180, 365]
+    Description: CloudWatch Logs retention for the identity Lambdas.
   VpcSubnetIds:
     Type: CommaDelimitedList
     Default: ''
@@ -31,21 +32,14 @@ Globals:
     MemorySize: 512
     Timeout: 10
     Tracing: Active
-    Layers:
-      - !Ref NodeSharedLayerArn
-      - !Ref NodeRuntimeLayerArn
     Environment:
       Variables:
         POWERTOOLS_SERVICE_NAME: !Sub 'identity-${Environment}'
         ENVIRONMENT: !Ref Environment
-        EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
-        DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
         CORS_ALLOWED_ORIGINS: !Join [',', !Ref CorsAllowedOrigins]
-        JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
-        # Node 24 no longer auto-loads Amazon CA certificates. The RDS CA
-        # bundle is shipped via the layer; point Node at it before opening
-        # any TLS connection to RDS.
-        NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
+        # Los bundles se generan con sourcemap; sin esta flag los stack traces
+        # de CloudWatch apuntan al JS bundleado en vez del TypeScript original.
+        NODE_OPTIONS: --enable-source-maps
 
 Conditions:
   HasVpcConfig: !Not [!Equals [!Join ['', !Ref VpcSubnetIds], '']]
@@ -96,59 +90,85 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-register-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityLoginLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-login-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityGetMeLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-get-me-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityUpdateProfileLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-update-profile-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityChangePasswordLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-change-password-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityListUsersLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-list-users-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityActivateUserLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-activate-user-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityDeactivateUserLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-deactivate-user-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityUpdateUserLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-update-user-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityAuthorizerLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-authorizer-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
+  # Estos dos faltaban: sin el LogGroup declarado, Lambda lo crea al primer
+  # invoke con retencion "Never expire", que no se puede corregir despues sin
+  # importarlo al stack.
+  IdentityMigrateLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-migrate-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  IdentityAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-audit-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
 
   IdentityRegisterFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - register.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-register-${Environment}'
       CodeUri: ./src/handlers
       Handler: register.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Register a new user (POST /v1/auth/register)
       Events:
         RegisterApi:
@@ -161,13 +181,6 @@ Resources:
             ThrottleSettings:
               RateLimit: 5.0
               BurstLimit: 10
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
-        - SSMParameterReadPolicy:
-            ParameterName: !Sub 'spark-match-${Environment}-*'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -176,10 +189,23 @@ Resources:
 
   IdentityLoginFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - login.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-login-${Environment}'
       CodeUri: ./src/handlers
       Handler: login.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Login user (POST /v1/auth/login)
       Events:
         LoginApi:
@@ -192,9 +218,6 @@ Resources:
             ThrottleSettings:
               RateLimit: 5.0
               BurstLimit: 10
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -203,10 +226,23 @@ Resources:
 
   IdentityGetMeFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - get-me.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-get-me-${Environment}'
       CodeUri: ./src/handlers
       Handler: get-me.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Get current user (GET /v1/users/me)
       Events:
         GetMeApi:
@@ -217,9 +253,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -228,10 +261,23 @@ Resources:
 
   IdentityUpdateProfileFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - update-profile.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-update-profile-${Environment}'
       CodeUri: ./src/handlers
       Handler: update-profile.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Update own profile (PATCH /v1/users/me)
       Events:
         UpdateProfileApi:
@@ -242,9 +288,6 @@ Resources:
             Method: PATCH
             Auth:
               Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -253,10 +296,23 @@ Resources:
 
   IdentityChangePasswordFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - change-password.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-change-password-${Environment}'
       CodeUri: ./src/handlers
       Handler: change-password.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Change own password (PUT /v1/users/me/password)
       Events:
         ChangePasswordApi:
@@ -267,9 +323,6 @@ Resources:
             Method: PUT
             Auth:
               Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -278,10 +331,23 @@ Resources:
 
   IdentityListUsersFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - list-users.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-list-users-${Environment}'
       CodeUri: ./src/handlers
       Handler: list-users.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: List users (GET /v1/users) - admin only
       Events:
         ListUsersApi:
@@ -292,9 +358,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -303,10 +366,23 @@ Resources:
 
   IdentityActivateUserFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - activate-user.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-activate-user-${Environment}'
       CodeUri: ./src/handlers
       Handler: activate-user.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Activate user (POST /v1/users/{userId}/activate) - admin only
       Events:
         ActivateUserApi:
@@ -317,11 +393,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -330,10 +401,23 @@ Resources:
 
   IdentityDeactivateUserFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - deactivate-user.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-deactivate-user-${Environment}'
       CodeUri: ./src/handlers
       Handler: deactivate-user.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Deactivate user (POST /v1/users/{userId}/deactivate) - admin only
       Events:
         DeactivateUserApi:
@@ -344,11 +428,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -357,10 +436,23 @@ Resources:
 
   IdentityUpdateUserFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - update-user.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-update-user-${Environment}'
       CodeUri: ./src/handlers
       Handler: update-user.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Update user (PATCH /v1/users/{userId}) - admin only
       Events:
         UpdateUserApi:
@@ -371,11 +463,6 @@ Resources:
             Method: PATCH
             Auth:
               Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -393,23 +480,29 @@ Resources:
   # ===========================================================================
   IdentityAuthorizerFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - authorizer.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-authorizer-${Environment}'
       CodeUri: ./src/handlers
       Handler: authorizer.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: HttpApi Lambda Authorizer - verifies JWT and attaches userId/email/role to the request context
       Timeout: 10
       MemorySize: 256
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: !Sub 'identity-authorizer-${Environment}'
-          ENVIRONMENT: !Ref Environment
-          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
-        - SSMParameterReadPolicy:
-            ParameterName: 'spark-match-secret-jwt-arn'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -451,29 +544,32 @@ Resources:
   # IAM-based auth (lambda:InvokeFunction) replaces the previous token-based
   # auth so there is no static secret to rotate and no HTTP surface to
   # attack.
+  #
+  # BuildMethod es `makefile` y no `esbuild` porque el artefacto necesita algo
+  # que esbuild no empaqueta: los 4 .sql de migrations/, que el handler lee en
+  # runtime con resolve(process.cwd(), 'migrations') = /var/task/migrations.
+  # Ver Makefile en este mismo directorio.
+  #
+  # El DSN ya no se inyecta por env var: se lee del SecureString
+  # /spark-match/{env}/config/db-connection-url en runtime. `{{resolve:ssm:}}`
+  # no descifra SecureString y `{{resolve:ssm-secure:}}` no esta soportado
+  # dentro de Environment.Variables de una Lambda.
   # ===========================================================================
   IdentityMigrateFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       FunctionName: !Sub 'spark-match-identity-migrate-${Environment}'
-      CodeUri: ./src/handlers
+      CodeUri: ./
       Handler: migrate.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Apply node-pg-migrate migrations against RDS (direct invoke, not HTTP)
       Timeout: 60
       MemorySize: 1024
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: !Sub 'identity-migrate-${Environment}'
-          ENVIRONMENT: !Ref Environment
-          # Resolved by Terraform from the same secret as the other
-          # identity Lambdas (DB_SECRET_ARN) at deploy time.
-          MIGRATE_DATABASE_URL: '{{resolve:ssm:/spark-match/db/connection-url}}'
-          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - SSMParameterReadPolicy:
-            ParameterName: 'spark-match-${Environment}-db-connection-url'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -492,10 +588,23 @@ Resources:
   # ===========================================================================
   IdentityAuditFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - audit.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-audit-${Environment}'
       CodeUri: ./src/handlers
       Handler: audit.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Admin-only audit log read endpoint with filters + cursor pagination
       Events:
         AuditApi:
@@ -514,11 +623,6 @@ Resources:
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: !Sub 'identity-audit-${Environment}'
-          ENVIRONMENT: !Ref Environment
-          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds

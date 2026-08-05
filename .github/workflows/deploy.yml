@@ -54,7 +54,10 @@ on:
         description: 'Environment to deploy'
         required: true
         type: choice
-        options: [dev, staging, prod]
+        # `staging` no esta: no existe infraestructura para el (ni VPC, ni RDS,
+        # ni el rol spark-match-sam-deploy-staging). Dejarlo en la lista solo
+        # servia para lanzar deploys que fallan al asumir el rol.
+        options: [dev, prod]
         default: dev
 
 permissions:
@@ -73,7 +76,12 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    # `prod` mapea al GH Environment `production`, que ya tiene branch policy
+    # (solo main). Usar `environment: prod` haria que GitHub creara al vuelo un
+    # environment nuevo, sin ninguna proteccion. El sub del token OIDC pasa a
+    # ser `environment:production`, que es justo lo que el trust policy del rol
+    # de prod acepta (live/prod/main.tf: github_environment_name = "production").
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'dev' }}
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -88,22 +96,24 @@ jobs:
         uses: aws-actions/setup-sam@v3
 
       # ------------------------------------------------------------------
-      # Build workspace + lambda layers inline. A reusable workflow can
-      # only be invoked at the job level (jobs.<id>.uses), never as a
-      # step -- GitHub rejects the whole file at parse time with
-      # "reusable workflows should be referenced at the top-level
-      # jobs.*.uses key". These three steps replace the invalid call to
-      # reusable-node-build.yml; the rest of the deploy workflow (OIDC,
-      # sam-build, sam-deploy) is unchanged.
+      # Build workspace inline. A reusable workflow can only be invoked at
+      # the job level (jobs.<id>.uses), never as a step -- GitHub rejects
+      # the whole file at parse time with "reusable workflows should be
+      # referenced at the top-level jobs.*.uses key".
+      #
+      # `build:shared` sigue siendo necesario aunque el empaquetado use
+      # esbuild: el package @spark-match/shared expone su `exports` map
+      # apuntando a ./dist, asi que sin compilarlo esbuild no resuelve los
+      # imports `@spark-match/shared/*` de los handlers.
+      #
+      # Ya no se construyen layers: cada funcion se empaqueta con
+      # `BuildMethod: esbuild` (o `makefile` en migrate).
       # ------------------------------------------------------------------
       - name: install-dependencies
         run: npm ci
 
       - name: build-shared-workspace
         run: npm run build:shared
-
-      - name: build-lambda-layers
-        run: npm run layer:build:all
 
       # ------------------------------------------------------------------
       # OIDC credentials: assume spark-match-sam-deploy-<env> in the
@@ -123,12 +133,68 @@ jobs:
           role-to-assume: arn:aws:iam::681526276858:role/spark-match-sam-deploy-${{ inputs.environment }}
           aws-region: us-east-1
 
+      # ------------------------------------------------------------------
+      # Config de red y CORS desde SSM (contrato ADR-0002, publicado por
+      # modules/ssm-bootstrap en 02-infrastructure).
+      #
+      # Sin este paso las Lambdas quedan FUERA de la VPC: la condicion
+      # `HasVpcConfig` del template evalua a false cuando VpcSubnetIds llega
+      # vacio, que es exactamente lo que pasaba porque nadie pasaba el
+      # parametro. Una Lambda sin VPC no llega al RDS privado.
+      #
+      # Las comas se escapan con `\,` porque los tres son CommaDelimitedList y
+      # `sam deploy --parameter-overrides` usa la coma como separador entre
+      # parametros.
+      # ------------------------------------------------------------------
+      - name: read-network-and-cors-config-from-ssm
+        id: config
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          get() {
+            aws ssm get-parameter --name "/spark-match/${ENV_NAME}/config/$1" \
+              --query Parameter.Value --output text
+          }
+          SUBNETS="$(get private-subnet-ids)"
+          SGS="$(get lambda-security-group-id)"
+          CORS="$(get cors-allowed-origins)"
+
+          if [ -z "${SUBNETS}" ] || [ "${SUBNETS}" = "None" ]; then
+            echo "::error::/spark-match/${ENV_NAME}/config/private-subnet-ids vacio: las Lambdas quedarian fuera de la VPC y no alcanzarian RDS."
+            exit 1
+          fi
+
+          {
+            echo "subnets=${SUBNETS//,/\\,}"
+            echo "security-groups=${SGS//,/\\,}"
+            echo "cors=${CORS//,/\\,}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "subnets=${SUBNETS} | sgs=${SGS} | cors=${CORS}"
+
+      # `--use-container` no aplica: el empaquetado es esbuild + un makefile
+      # que solo llama a esbuild y copia migrations/. Levantar la imagen de
+      # build de Lambda solo agregaria minutos y una dependencia de Docker.
       - name: sam-build
-        run: sam build --use-container
+        run: sam build
 
       - name: sam-deploy
-        run: >
-          sam deploy
-          --config-env ${{ inputs.environment }}
-          --no-fail-on-empty-changeset
-          --no-disable-rollback
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+          RETENTION: ${{ inputs.environment == 'prod' && '365' || '14' }}
+          SUBNETS: ${{ steps.config.outputs.subnets }}
+          SGS: ${{ steps.config.outputs.security-groups }}
+          CORS: ${{ steps.config.outputs.cors }}
+        run: |
+          set -euo pipefail
+          sam deploy \
+            --config-env "${ENV_NAME}" \
+            --no-fail-on-empty-changeset \
+            --no-disable-rollback \
+            --parameter-overrides \
+              "Environment=${ENV_NAME}" \
+              "LogRetentionInDays=${RETENTION}" \
+              "VpcSubnetIds=${SUBNETS}" \
+              "VpcSecurityGroupIds=${SGS}" \
+              "CorsAllowedOrigins=${CORS}"
