@@ -234,3 +234,71 @@ jobs:
               "VpcSubnetIds=${SUBNETS}" \
               "VpcSecurityGroupIds=${SGS}" \
               "CorsAllowedOrigins=${CORS}"
+
+      # ------------------------------------------------------------------
+      # Smoke test post-deploy. Un `sam deploy` verde solo dice que
+      # CloudFormation creo los recursos, NO que el codigo arranque: el
+      # 2026-08-05 el stack quedo en UPDATE_COMPLETE con las 12 funciones
+      # muertas en el init (bundle ESM sin el shim de createRequire) y con
+      # el authorizer ininvocable por falta de Lambda::Permission. Ambos
+      # bugs pasaron el deploy y solo apareceieron al pegarle a la API.
+      #
+      # Las dos sondas no escriben nada -- ni un usuario de prueba en RDS:
+      #
+      #   login con credenciales falsas -> 401
+      #     Discrimina "la funcion arranca y responde" de "murio en el
+      #     init". Un Init Error sale como 500.
+      #
+      #   users/me con un Bearer invalido -> 403
+      #     Discrimina "API Gateway puede invocar el authorizer" de "no
+      #     tiene permiso" (500). OJO: sin header Authorization la API
+      #     corta con 401 sin llegar a invocarlo, asi que esa variante no
+      #     prueba nada del authorizer.
+      # ------------------------------------------------------------------
+      - name: smoke-test
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+          BOGUS_TOKEN: smoke-probe-invalid
+        run: |
+          set -euo pipefail
+          API="$(aws cloudformation describe-stacks \
+            --stack-name "spark-match-backend-${ENV_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='HttpApiUrl'].OutputValue" \
+            --output text)"
+          if [ -z "${API}" ] || [ "${API}" = "None" ]; then
+            echo "::error::el stack no expone HttpApiUrl"
+            exit 1
+          fi
+          echo "API: ${API}"
+
+          probe() {
+            local name="$1" expected="$2" got="$3"
+            if [ "${got}" != "${expected}" ]; then
+              echo "::error::${name}: esperaba HTTP ${expected}, obtuvo ${got}"
+              return 1
+            fi
+            echo "  ok ${name}: HTTP ${got}"
+          }
+
+          LOGIN_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST "${API}/v1/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke-probe@invalid.local","password":"not-a-real-password"}')"
+
+          # El header se arma en una variable en vez de escribirlo inline en el
+          # curl: la regla `curl-auth-header` de gitleaks marca cualquier
+          # `-H "Authorization: ..."` literal, y tiene razon en hacerlo. El
+          # valor es un placeholder que el authorizer debe rechazar.
+          BOGUS_HEADER="Authorization: Bearer ${BOGUS_TOKEN}"
+          AUTHZ_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            "${API}/v1/users/me" -H "${BOGUS_HEADER}")"
+
+          FAILED=0
+          probe "login responde (handler vivo)" 401 "${LOGIN_CODE}" || FAILED=1
+          probe "authorizer invocable"          403 "${AUTHZ_CODE}" || FAILED=1
+
+          if [ "${FAILED}" -ne 0 ]; then
+            echo "::error::El deploy creo los recursos pero la API no responde como debe. Revisa los log groups /aws/lambda/spark-match-identity-*-${ENV_NAME}."
+            exit 1
+          fi
+          echo "Smoke test OK."

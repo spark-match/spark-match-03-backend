@@ -85,6 +85,38 @@ jobs:
       npm-script: 'migrate:up'
       timeout-minutes: 10
 
+  # sam-validate: expande el transform AWS::Serverless-2016-10-31 y corre
+  # cfn-lint sobre el resultado, que es exactamente lo que hace CloudFormation
+  # al crear el changeset. Sin este gate, un template invalido solo se descubre
+  # desplegando: el 2026-08-05 los 10 errores del nested stack de identity
+  # (ThrottleSettings inexistente en HttpApi, Authorizer por !Ref en vez de por
+  # nombre) costaron un ciclo completo de deploy + rollback + limpieza del
+  # stack. `sam validate --lint` los reproduce en ~20 s.
+  #
+  # Inline y no reusable: 01-devops no tiene una receta de SAM (la que habia se
+  # borro en la limpieza de PR #201/#202, ver AGENTS.md §11).
+  #
+  # No necesita credenciales AWS: --lint es cfn-lint local. Solo la region,
+  # que se pasa por flag para no depender de la config del runner.
+  sam-validate:
+    name: "sam-validate-ci"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: setup-aws-sam-cli
+        uses: aws-actions/setup-sam@v3
+
+      # Los dos por separado: el root incluye el nested via AWS::CloudFormation::Stack
+      # con una Location local, que sam validate no sigue.
+      - name: validate-root-template
+        run: sam validate --template template.yaml --region us-east-1 --lint
+
+      - name: validate-identity-template
+        run: sam validate --template contexts/identity/template.yaml --region us-east-1 --lint
+
   actionlint:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-actionlint.yml@main
     with:
