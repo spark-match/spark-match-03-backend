@@ -42,77 +42,32 @@ Parameters:
     Default: ''
     Description: Security group IDs for VPC-attached Lambdas (leave empty for non-VPC dev runs).
 
-Globals:
-  Function:
-    Runtime: nodejs24.x
-    MemorySize: 512
-    Timeout: 15
-    Tracing: Active
-    Architectures: [x86_64]
-    Environment:
-      Variables:
-        # These values come from SSM Parameter Store (created by Terraform in 02-infrastructure)
-        # SAM uses {{resolve:ssm:/path}} to fetch them at deploy time
-        POWERTOOLS_SERVICE_NAME: !Ref AWS::StackName
-        POWERTOOLS_LOG_LEVEL: INFO
-        LOG_LEVEL: INFO
-        ENVIRONMENT: !Ref Environment
-        # Comma-separated CORS allowlist. `*` is the dev default; for prod
-        # pass an explicit list via the CorsAllowedOrigins CF parameter.
-        CORS_ALLOWED_ORIGINS: !Join [',', !Ref CorsAllowedOrigins]
-        # SSM references - these come from Terraform
-        EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
-        DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
-        IDEMPOTENCY_TABLE_NAME: '{{resolve:ssm:/spark-match/dynamodb/idempotency-table}}'
-    Tags:
-      - Key: Project
-        Value: spark-match
-      - Key: Environment
-        Value: !Ref Environment
-      - Key: ManagedBy
-        Value: SAM
-      - Key: Component
-        Value: backend
+# Sin bloque `Globals`: este stack no declara ninguna funcion propia (todas
+# viven en IdentityStack) y los Globals de SAM no cruzan hacia stacks
+# anidados. El bloque anterior definia cuatro env vars con
+# `{{resolve:ssm:/spark-match/...}}` apuntando a rutas que no existen en
+# ninguna cuenta -- el contrato real es /spark-match/{env}/config/* (ADR-0002)
+# y hoy se resuelve en runtime, no en tiempo de deploy.
 
 Resources:
   # ===========================================================================
-  # Lambda Layers (built from layers/ directory)
-  # ===========================================================================
-  NodeSharedLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub 'spark-match-node-shared-${Environment}'
-      Description: Shared TS utilities (auth, http, logger, events, infra, templates)
-      ContentUri: ./layers/node-shared/dist
-      CompatibleRuntimes:
-        - nodejs24.x
-      RetentionPolicy: Retain
-
-  NodeRuntimeLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub 'spark-match-node-runtime-${Environment}'
-      Description: Node runtime deps (zod, ajv, middy, powertools, kysely, pg)
-      ContentUri: ./layers/node-runtime
-      CompatibleRuntimes:
-        - nodejs24.x
-      RetentionPolicy: Retain
-
-  # ===========================================================================
   # Nested stack: Identity Context
   # ===========================================================================
+  # Ya no se pasan ARNs de layers: el empaquetado paso a `BuildMethod: esbuild`
+  # por funcion, que bundlea el TypeScript y sus dependencias dentro del
+  # artefacto. Eso elimina de un golpe los layers (que ademas nunca llegaron a
+  # construirse bien) y el drift de versiones entre el codigo y lo que el layer
+  # traia.
   IdentityStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: ./contexts/identity/template.yaml
       Parameters:
         Environment: !Ref Environment
-        NodeSharedLayerArn: !Ref NodeSharedLayer
-        NodeRuntimeLayerArn: !Ref NodeRuntimeLayer
-        VpcSubnetIds: !Ref VpcSubnetIds
-        VpcSecurityGroupIds: !Ref VpcSecurityGroupIds
-        CorsAllowedOrigins: !Ref CorsAllowedOrigins
+        LogRetentionInDays: !Ref LogRetentionInDays
+        VpcSubnetIds: !Join [',', !Ref VpcSubnetIds]
+        VpcSecurityGroupIds: !Join [',', !Ref VpcSecurityGroupIds]
+        CorsAllowedOrigins: !Join [',', !Ref CorsAllowedOrigins]
       Tags:
         - Key: Project
           Value: spark-match
@@ -151,18 +106,6 @@ Outputs:
     Value: !GetAtt IdentityStack.Outputs.HttpApiId
     Export:
       Name: !Sub 'spark-match-${Environment}-HttpApiId'
-
-  NodeSharedLayerArn:
-    Description: Shared utilities layer ARN
-    Value: !Ref NodeSharedLayer
-    Export:
-      Name: !Sub 'spark-match-${Environment}-NodeSharedLayerArn'
-
-  NodeRuntimeLayerArn:
-    Description: Node runtime deps layer ARN
-    Value: !Ref NodeRuntimeLayer
-    Export:
-      Name: !Sub 'spark-match-${Environment}-NodeRuntimeLayerArn'
 
   IdentityStackVpcSubnetIds:
     Description: Comma-separated VPC subnet IDs forwarded to the identity nested stack (empty for non-VPC dev runs)

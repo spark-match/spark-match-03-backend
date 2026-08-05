@@ -240,7 +240,7 @@ promotion-approved-by: @<handle> on YYYY-MM-DD via chat
 
 ### `.github/workflows/deploy.yml`
 
-`workflow_dispatch` only. **Not** a reusable caller — inline `checkout → setup-node → setup-sam → npm ci → build:shared → layer:build:all → sam build → sam deploy`. Uses OIDC (`id-token: write`) + a GH Environment. Consumes the IAM roles defined by `02-infrastructure` (`spark-match-sam-deploy-{env}`, `spark-match-lambda-runtime-{env}` — see that repo's `docs/IAM_ROLES.md`).
+`workflow_dispatch` only. **Not** a reusable caller — inline `checkout → setup-node → setup-sam → npm ci → build:shared → leer config de red/CORS desde SSM → sam build → sam deploy`. Uses OIDC (`id-token: write`) + a GH Environment. Consumes the IAM roles defined by `02-infrastructure` (`spark-match-sam-deploy-{env}`, `spark-match-lambda-runtime-{env}` — see that repo's `docs/IAM_ROLES.md`).
 
 > Per §12.2, an inline workflow must carry a comment explaining **why** it is not a reusable.
 > `deploy.yml` carries this header comment (lines 1-46, valid as of PR #118).
@@ -319,7 +319,7 @@ Resolution differs by tool — this is the single most common source of "works l
 |---|---|---|
 | `vitest` | `vite-tsconfig-paths` plugin (devDep `^6.1.1`) | `shared/src/**` (source) |
 | `tsc --noEmit` (root) | npm workspace symlink + `exports` map | `shared/dist/**` (**requires `build:shared`**) |
-| Lambda runtime | `node-shared` layer | compiled `shared` |
+| Lambda runtime | bundle de esbuild | `shared` compilado, bundleado dentro del artefacto de cada funcion |
 
 `contexts/identity/tsconfig.json` declares `paths` → `../../shared/src/*` **and** includes `tests/**/*`,
 so the plugin processes imports from test files. The root `tsconfig.json` excludes `**/*.test.ts`, so
@@ -371,9 +371,6 @@ contexts/identity/
     service/                      # user-service, audit-service
   tests/                          # integration tests (migrate, user-service)
 
-layers/
-  node-runtime/                   # zod, middy, powertools, kysely, pg, pino, zod-to-openapi (NO jose)
-  node-shared/                    # compiled @spark-match/shared (build.sh only, no package.json)
 migrations/                       # node-pg-migrate SQL, 001_… → 004_… (no "V" prefix)
 scripts/generate-openapi.ts       # npm run generate:openapi → docs/openapi.json
 tests/setup.ts                    # vitest setupFiles

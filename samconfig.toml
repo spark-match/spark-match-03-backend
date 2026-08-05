@@ -48,31 +48,19 @@ parameter_overrides = [
     "LogRetentionInDays=14",
 ]
 
-[staging]
-[staging.deploy]
-[staging.deploy.parameters]
-stack_name = "spark-match-backend-staging"
-s3_bucket = "spark-match-sam-artifacts-staging"
-s3_prefix = "spark-match-backend"
-region = "us-east-1"
-# CI (deploy.yml) corre sin TTY: un prompt de confirmacion colgaria el job.
-confirm_changeset = false
-capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
-disable_rollback = false
-resolve_s3 = true
-resolve_image_repos = true
-save_params = true
-template_file = "template.yaml"
-parameter_overrides = [
-    "Environment=staging",
-    "LogRetentionInDays=30",
-]
+# Sin bloque [staging]: no existe infraestructura de staging (ni VPC, ni RDS,
+# ni el rol spark-match-sam-deploy-staging), y deploy.yml ya no lo ofrece como
+# opcion. Ver docs/runtime-topology.md.
 
 [prod]
 [prod.deploy]
 [prod.deploy.parameters]
 stack_name = "spark-match-backend-prod"
 s3_bucket = "spark-match-sam-artifacts-prod"
+# Faltaba: sin s3_prefix los artefactos de prod caen en la raiz del bucket, a
+# diferencia de dev. Con el prefijo, el lifecycle del bucket aplica igual en
+# ambos ambientes.
+s3_prefix = "spark-match-backend"
 region = "us-east-1"
 # CI (deploy.yml) corre sin TTY: un prompt de confirmacion colgaria el job.
 confirm_changeset = false
@@ -81,6 +69,10 @@ disable_rollback = true
 resolve_s3 = true
 resolve_image_repos = true
 save_params = true
+template_file = "template.yaml"
+# deploy.yml sobreescribe estos valores con --parameter-overrides (incluyendo
+# VPC y CORS leidos de SSM). Se dejan para que un `sam deploy --config-env prod`
+# manual no arranque sin ambiente definido.
 parameter_overrides = [
     "Environment=prod",
     "LogRetentionInDays=365",
