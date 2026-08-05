@@ -15,8 +15,17 @@
 # sin el shim, el modulo revienta con "require is not defined".
 # =============================================================================
 
+# `npx --no-install esbuild` no sirve aca: SAM invoca este make desde un
+# scratch dir donde npx no resuelve el node_modules del workspace, intenta
+# bajar el paquete y en CI (sin TTY) muere con
+#   npx canceled due to missing packages and no YES option: ["esbuild@0.28.1"]
+# Se resuelve el binario directamente: primero por PATH (el workflow de deploy
+# expone el node_modules/.bin de la raiz), y si no, por ruta relativa al
+# workspace -- la misma suposicion que ya hace el `cp -R ../../migrations`.
+ESBUILD ?= $(shell command -v esbuild 2>/dev/null || echo ../../node_modules/.bin/esbuild)
+
 build-IdentityMigrateFunction:
-	npx --no-install esbuild src/handlers/migrate.ts \
+	$(ESBUILD) src/handlers/migrate.ts \
 		--bundle \
 		--platform=node \
 		--target=node24 \
