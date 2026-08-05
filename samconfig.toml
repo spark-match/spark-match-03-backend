@@ -18,7 +18,9 @@ disable_rollback = false
 # de verdad es `s3_bucket`, no el bucket que SAM se inventaria.
 resolve_image_repos = true
 save_params = true
-template_file = "template.yaml"
+# Sin `template_file`: fijarlo hace que sam deploy use el template CRUDO e
+# ignore .aws-sam/build/template.yaml, subiendo los CodeUri sin compilar
+# (TypeScript tal cual). Sin la clave, sam deploy detecta el build solo.
 
 [default.build]
 [default.build.parameters]
@@ -47,7 +49,9 @@ disable_rollback = false
 # `s3_bucket` en deploys no guiados.
 resolve_image_repos = true
 save_params = true
-template_file = "template.yaml"
+# Sin `template_file`: fijarlo hace que sam deploy use el template CRUDO e
+# ignore .aws-sam/build/template.yaml, subiendo los CodeUri sin compilar
+# (TypeScript tal cual). Sin la clave, sam deploy detecta el build solo.
 parameter_overrides = [
     "Environment=dev",
     "LogRetentionInDays=14",
@@ -75,7 +79,9 @@ disable_rollback = true
 # `s3_bucket` en deploys no guiados.
 resolve_image_repos = true
 save_params = true
-template_file = "template.yaml"
+# Sin `template_file`: fijarlo hace que sam deploy use el template CRUDO e
+# ignore .aws-sam/build/template.yaml, subiendo los CodeUri sin compilar
+# (TypeScript tal cual). Sin la clave, sam deploy detecta el build solo.
 # deploy.yml sobreescribe estos valores con --parameter-overrides (incluyendo
 # VPC y CORS leidos de SSM). Se dejan para que un `sam deploy --config-env prod`
 # manual no arranque sin ambiente definido.
