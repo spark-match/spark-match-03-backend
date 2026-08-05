@@ -174,9 +174,13 @@ jobs:
       # vacio, que es exactamente lo que pasaba porque nadie pasaba el
       # parametro. Una Lambda sin VPC no llega al RDS privado.
       #
-      # Las comas se escapan con `\,` porque los tres son CommaDelimitedList y
-      # `sam deploy --parameter-overrides` usa la coma como separador entre
-      # parametros.
+      # Las comas NO se escapan. `sam deploy --parameter-overrides` separa
+      # los pares Key=Value por ESPACIOS, no por comas: un valor con comas
+      # viaja intacto y CloudFormation es quien parte el CommaDelimitedList.
+      # El escape `\,` que habia aca metia el backslash literal en el valor
+      # y Lambda rechazaba la subnet resultante:
+      #   Value '[subnet-...\, subnet-...]' at 'vpcConfig.subnetIds' failed
+      #   to satisfy constraint ... pattern: subnet-[0-9a-z]*
       # ------------------------------------------------------------------
       - name: read-network-and-cors-config-from-ssm
         id: config
@@ -198,9 +202,9 @@ jobs:
           fi
 
           {
-            echo "subnets=${SUBNETS//,/\\,}"
-            echo "security-groups=${SGS//,/\\,}"
-            echo "cors=${CORS//,/\\,}"
+            echo "subnets=${SUBNETS}"
+            echo "security-groups=${SGS}"
+            echo "cors=${CORS}"
           } >> "$GITHUB_OUTPUT"
 
           echo "subnets=${SUBNETS} | sgs=${SGS} | cors=${CORS}"
