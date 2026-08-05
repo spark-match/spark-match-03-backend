@@ -116,6 +116,31 @@ jobs:
         run: npm run build:shared
 
       # ------------------------------------------------------------------
+      # `sam build` invoca el NodejsNpmEsbuildBuilder, que resuelve el
+      # binario `esbuild` por PATH (o por el node_modules/.bin del CodeUri
+      # de cada funcion). Con npm workspaces, `npm ci` hoistea esbuild al
+      # node_modules de la raiz, que no esta en el PATH del runner: ni el
+      # CodeUri (`contexts/identity/src/handlers`) ni el PATH lo tienen, y
+      # el build muere con
+      #   Esbuild Failed: Cannot find esbuild. esbuild must be installed
+      #   on the host machine to use this feature.
+      #
+      # Se expone el .bin de la raiz en vez de `npm i -g esbuild` para que
+      # la version sea la que fija package-lock.json (0.28.1) y no una
+      # flotante que cambie entre corridas.
+      # ------------------------------------------------------------------
+      - name: expose-esbuild-on-path
+        run: |
+          set -euo pipefail
+          BIN="${GITHUB_WORKSPACE}/node_modules/.bin"
+          if [ ! -x "${BIN}/esbuild" ]; then
+            echo "::error::${BIN}/esbuild no existe tras npm ci. Revisa que esbuild siga en devDependencies de la raiz."
+            exit 1
+          fi
+          echo "${BIN}" >> "$GITHUB_PATH"
+          "${BIN}/esbuild" --version
+
+      # ------------------------------------------------------------------
       # OIDC credentials: assume spark-match-sam-deploy-<env> in the
       # 681526276858 AWS account. The role is created by
       # 02-infrastructure/modules/oidc-github (Fase 1 applied to dev).
