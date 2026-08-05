@@ -9,6 +9,9 @@ dist/
 build/
 *.tsbuildinfo
 
+# Pre-bundle de IdentityMigrateFunction (npm run bundle:migrate)
+.build/
+
 # SAM / AWS
 .aws-sam/
 sam-build/
