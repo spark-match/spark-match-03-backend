@@ -10,11 +10,11 @@ Last reviewed: 2026-07-28.
 
 **Ambientes**:
 
-| Nombre | Stack name | Region | S3 bucket | Notas |
-|---|---|---|---|---|
-| `dev` | `spark-match-backend-dev` | `us-east-1` | `spark-match-sam-artifacts-dev` | non-VPC |
-| `staging` | (manual) | `us-east-1` | (manual) | VPC |
-| `prod` | `spark-match-backend-prod` | `us-east-1` | `spark-match-sam-artifacts-prod` | VPC, `disable_rollback=true` |
+| Nombre    | Stack name                 | Region      | S3 bucket                        | Notas                        |
+| --------- | -------------------------- | ----------- | -------------------------------- | ---------------------------- |
+| `dev`     | `spark-match-backend-dev`  | `us-east-1` | `spark-match-sam-artifacts-dev`  | non-VPC                      |
+| `staging` | (manual)                   | `us-east-1` | (manual)                         | VPC                          |
+| `prod`    | `spark-match-backend-prod` | `us-east-1` | `spark-match-sam-artifacts-prod` | VPC, `disable_rollback=true` |
 
 `staging` no est en `samconfig.toml` an (gap conocido). Ver
 [runbook.md § 8](#8-known-gaps).
@@ -183,10 +183,30 @@ resolver `MIGRATE_DATABASE_URL` y leer la secret de DB.
 
 ### 3.5 Convention: migraciones en deploy
 
-Hoy: las migraciones se corren **manualmente** post-deploy (gap
-conocido). El Sprint 2 #1 (`migrations-dry-run`) introducir un CI job
-que valide que las migraciones pueden aplicarse sin error antes del
-deploy.
+Las migraciones se aplican **solas**, en el propio deploy. El paso
+`apply-database-migrations` de `.github/workflows/deploy.yml` corre
+justo despues de `sam deploy`, en el mismo job, y tumba el deploy si
+una migracion falla o si queda alguna pendiente despues del `up`.
+
+Los comandos de 3.1 a 3.3 siguen siendo validos para depurar o para un
+`down`, pero en la operacion normal no hay que ejecutar nada a mano.
+
+Dos cosas que conviene tener claras y que no son evidentes:
+
+- **El paso no puede ir antes del deploy.** Los `.sql` viajan dentro
+  del artefacto de la Lambda migradora, asi que invocarla antes de
+  desplegar ejecuta el bundle viejo, que no conoce la migracion nueva
+  y responde `{"applied":[]}`: exito aparente sin haber aplicado nada.
+- **Queda una ventana corta e inevitable.** Entre que `sam deploy`
+  termina y el paso de migraciones acaba, el codigo nuevo esta vivo
+  contra el esquema viejo. No se puede cerrar reordenando; solo
+  acortar, y por eso el paso va inmediatamente despues.
+
+El job `migrations-dry-run` de `ci.yml` es **otra cosa** y no debe
+confundirse con esto: valida el SQL contra un contenedor `postgres:17`
+efimero en tiempo de PR, sin credenciales AWS y sin tocar RDS. Que
+salga verde no significa que ninguna migracion se haya aplicado en
+ningun entorno.
 
 ---
 
@@ -362,22 +382,22 @@ aws pi describe-query-statistics \
 
 ## 8. Known gaps
 
-| Gap | Severidad | Tracking |
-|---|---|---|
-| `staging` no en `samconfig.toml` | P1 | Crear `[staging.deploy]` block; requiere VPC config |
-| `migrations-dry-run` CI job | P1 | Sprint 2 #1 — validar SQL antes de deploy |
-| `workflow_run` smoke test post-deploy | P2 | Sprint 2 #4 |
-| Self-healing stack reconcile | P2 | Sprint 2 #2 |
-| Auto-migrate post-deploy | P3 | Sprint 2 #3 (post-condition of #1) |
-| Bootstrap script for first admin user | P2 | No documentado; hoy `register` crea users con `role='admin'` (default 003) |
-| Bootstrap seed migration | P3 | Si se quiere sembrar admin sin API call |
-| Custom Lambda Permission `SourceArn` check | P3 | Sprint 2 #5 |
-| Aurora CA bundle in `node-runtime` layer | P2 | `build.sh` debe copiar `rds-ca-bundle.pem` al path `/var/task/certificates/rds.pem` esperado por `NODE_EXTRA_CA_CERTS` |
-| IAM `SecretsManagerReadWrite` `Resource: '*'` (5 occ.) | P2 | Sprint 5 — scope a ARNs especficos |
-| CORS `AllowOrigins: '*'` en prod | ~~P2~~ | ✅ Cerrado en PR-#87 (Sprint 3). El parametro CF `CorsAllowedOrigins` es configurable (default `*`); el handler echoa `Origin` cuando est en el allowlist. |
-| JWT TTL drift (jwt-helpers default 3600 vs composition 86400) | P3 | Alinear defaults |
-| `audit_log` UPDATE/DELETE permission | P2 | compliance: `REVOKE UPDATE, DELETE ON identity.audit_log FROM <app_role>` |
-| `audit_log` retention policy | P2 | Partition por mes + archive a S3 (crecimiento indefinido) |
+| Gap                                                           | Severidad | Tracking                                                                                                                                                   |
+| ------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `staging` no en `samconfig.toml`                              | P1        | Crear `[staging.deploy]` block; requiere VPC config                                                                                                        |
+| `migrations-dry-run` CI job                                   | P1        | Sprint 2 #1 — validar SQL antes de deploy                                                                                                                  |
+| `workflow_run` smoke test post-deploy                         | P2        | Sprint 2 #4                                                                                                                                                |
+| Self-healing stack reconcile                                  | P2        | Sprint 2 #2                                                                                                                                                |
+| Auto-migrate post-deploy                                      | P3        | Sprint 2 #3 (post-condition of #1)                                                                                                                         |
+| Bootstrap script for first admin user                         | P2        | No documentado; hoy `register` crea users con `role='admin'` (default 003)                                                                                 |
+| Bootstrap seed migration                                      | P3        | Si se quiere sembrar admin sin API call                                                                                                                    |
+| Custom Lambda Permission `SourceArn` check                    | P3        | Sprint 2 #5                                                                                                                                                |
+| Aurora CA bundle in `node-runtime` layer                      | P2        | `build.sh` debe copiar `rds-ca-bundle.pem` al path `/var/task/certificates/rds.pem` esperado por `NODE_EXTRA_CA_CERTS`                                     |
+| IAM `SecretsManagerReadWrite` `Resource: '*'` (5 occ.)        | P2        | Sprint 5 — scope a ARNs especficos                                                                                                                         |
+| CORS `AllowOrigins: '*'` en prod                              | ~~P2~~    | ✅ Cerrado en PR-#87 (Sprint 3). El parametro CF `CorsAllowedOrigins` es configurable (default `*`); el handler echoa `Origin` cuando est en el allowlist. |
+| JWT TTL drift (jwt-helpers default 3600 vs composition 86400) | P3        | Alinear defaults                                                                                                                                           |
+| `audit_log` UPDATE/DELETE permission                          | P2        | compliance: `REVOKE UPDATE, DELETE ON identity.audit_log FROM <app_role>`                                                                                  |
+| `audit_log` retention policy                                  | P2        | Partition por mes + archive a S3 (crecimiento indefinido)                                                                                                  |
 
 ---
 
@@ -390,9 +410,9 @@ aws pi describe-query-statistics \
 5. **DB:** `aws rds describe-db-instances ... DBInstanceStatus`. Picos de
    `DBLoad`?
 6. **EventBridge:** `aws events describe-event-bus
-   --name spark-match-events-dev`. Bus existe?
+--name spark-match-events-dev`. Bus existe?
 7. **Secrets Manager:** `aws secretsmanager describe-secret --secret-id
-   spark-match/jwt/dev`. Hay error de `DecryptionFailure`?
+spark-match/jwt/dev`. Hay error de `DecryptionFailure`?
 8. **Si todo OK pero 5xx persiste:** puede ser issue de cdigo. Rollback
    a la ltima versin estable (`sam deploy --config-env prod` con SHA
    anterior, ver § 2.3).
