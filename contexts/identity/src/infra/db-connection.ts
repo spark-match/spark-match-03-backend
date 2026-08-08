@@ -15,6 +15,7 @@ import { Pool } from 'pg';
 import {
   createSecretsReader,
   createSsmReader,
+  ssmConfigPath,
   withAwsErrorMapping,
   type SecretsReader,
   type SsmReader,
@@ -43,7 +44,7 @@ export async function getDbConnection(options?: {
 
   const resolvedSecretArn =
     options?.secretArn ?? (await withAwsErrorMapping('SSM', () =>
-      ssm.getRequiredString('/spark-match/db/secret-arn'),
+      ssm.getRequiredString(ssmConfigPath('db-secret-arn')),
     ));
 
   const creds = await withAwsErrorMapping('Secrets Manager', () =>
@@ -60,6 +61,15 @@ export async function getDbConnection(options?: {
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
     application_name: 'spark-match-backend',
+    // RDS PostgreSQL 15+ rechaza conexiones sin TLS, asi que `ssl` no es
+    // opcional. `rejectUnauthorized: false` cifra el transporte pero NO
+    // valida la cadena del certificado: la conexion viaja dentro de la VPC,
+    // de la ENI de la Lambda al endpoint de RDS, sin pasar por internet.
+    // Validar con el CA bundle de AWS (rejectUnauthorized: true + el .pem de
+    // rds-combined-ca-bundle) es follow-up explicito del plan de despliegue
+    // -- hoy no hay ningun .pem en el repo, pese a que el template SAM
+    // referencia uno via NODE_EXTRA_CA_CERTS.
+    ssl: { rejectUnauthorized: false },
   });
 
   cachedDb = new Kysely<Database>({

@@ -11,10 +11,16 @@ confirm_changeset = true
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 image_repositories = []
 disable_rollback = false
-resolve_s3 = true
+# Sin `resolve_s3`: es mutuamente excluyente con `s3_bucket` fuera de un deploy
+# guiado, y `sam deploy` aborta con
+#   Cannot use both --resolve-s3 and --s3-bucket parameters in non-guided deployments
+# El bucket lo crea Terraform (modules/storage-sam-artifacts), asi que la fuente
+# de verdad es `s3_bucket`, no el bucket que SAM se inventaria.
 resolve_image_repos = true
 save_params = true
-template_file = "template.yaml"
+# Sin `template_file`: fijarlo hace que sam deploy use el template CRUDO e
+# ignore .aws-sam/build/template.yaml, subiendo los CodeUri sin compilar
+# (TypeScript tal cual). Sin la clave, sam deploy detecta el build solo.
 
 [default.build]
 [default.build.parameters]
@@ -35,49 +41,50 @@ stack_name = "spark-match-backend-dev"
 s3_bucket = "spark-match-sam-artifacts-dev"
 s3_prefix = "spark-match-backend"
 region = "us-east-1"
-confirm_changeset = true
+# CI (deploy.yml) corre sin TTY: un prompt de confirmacion colgaria el job.
+confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 disable_rollback = false
-resolve_s3 = true
+# Ver el comentario de [default.deploy.parameters]: `resolve_s3` choca con
+# `s3_bucket` en deploys no guiados.
 resolve_image_repos = true
 save_params = true
-template_file = "template.yaml"
+# Sin `template_file`: fijarlo hace que sam deploy use el template CRUDO e
+# ignore .aws-sam/build/template.yaml, subiendo los CodeUri sin compilar
+# (TypeScript tal cual). Sin la clave, sam deploy detecta el build solo.
 parameter_overrides = [
     "Environment=dev",
     "LogRetentionInDays=14",
 ]
 
-[staging]
-[staging.deploy]
-[staging.deploy.parameters]
-stack_name = "spark-match-backend-staging"
-s3_bucket = "spark-match-sam-artifacts-staging"
-s3_prefix = "spark-match-backend"
-region = "us-east-1"
-confirm_changeset = true
-capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
-disable_rollback = false
-resolve_s3 = true
-resolve_image_repos = true
-save_params = true
-template_file = "template.yaml"
-parameter_overrides = [
-    "Environment=staging",
-    "LogRetentionInDays=30",
-]
+# Sin bloque [staging]: no existe infraestructura de staging (ni VPC, ni RDS,
+# ni el rol spark-match-sam-deploy-staging), y deploy.yml ya no lo ofrece como
+# opcion. Ver docs/runtime-topology.md.
 
 [prod]
 [prod.deploy]
 [prod.deploy.parameters]
 stack_name = "spark-match-backend-prod"
 s3_bucket = "spark-match-sam-artifacts-prod"
+# Faltaba: sin s3_prefix los artefactos de prod caen en la raiz del bucket, a
+# diferencia de dev. Con el prefijo, el lifecycle del bucket aplica igual en
+# ambos ambientes.
+s3_prefix = "spark-match-backend"
 region = "us-east-1"
-confirm_changeset = true
+# CI (deploy.yml) corre sin TTY: un prompt de confirmacion colgaria el job.
+confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 disable_rollback = true
-resolve_s3 = true
+# Ver el comentario de [default.deploy.parameters]: `resolve_s3` choca con
+# `s3_bucket` en deploys no guiados.
 resolve_image_repos = true
 save_params = true
+# Sin `template_file`: fijarlo hace que sam deploy use el template CRUDO e
+# ignore .aws-sam/build/template.yaml, subiendo los CodeUri sin compilar
+# (TypeScript tal cual). Sin la clave, sam deploy detecta el build solo.
+# deploy.yml sobreescribe estos valores con --parameter-overrides (incluyendo
+# VPC y CORS leidos de SSM). Se dejan para que un `sam deploy --config-env prod`
+# manual no arranque sin ambiente definido.
 parameter_overrides = [
     "Environment=prod",
     "LogRetentionInDays=365",

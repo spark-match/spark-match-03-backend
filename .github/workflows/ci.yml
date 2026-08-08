@@ -1,29 +1,42 @@
 name: CI
 
+# SIN `paths-ignore` A PROPOSITO. NO LO VUELVAS A ANADIR.
+#
+# Aqui vivia un filtro de nueve patrones (NB-7) que saltaba la suite entera
+# en pull requests de solo documentacion. La lista era deliberadamente
+# explicita, no un `*.md` generico, y el razonamiento estaba bien escrito.
+# Aun asi hay que quitarlo, por una razon que el comentario original no podia
+# ver: un filtro de `paths` y un check requerido son incompatibles por
+# construccion. Si el filtro no casa, el workflow no corre; si no corre, el
+# check no se publica; y un check requerido que no se publica deja el pull
+# request en "Expected - waiting for status to be reported" para siempre.
+#
+# Hasta el 2026-08-07 no rompia nada, y por un motivo que no consuela: el
+# ruleset de este repositorio NO tenia regla `required_status_checks`. Los
+# catorce checks de cada pull request eran decorativos, asi que daba igual
+# cuales se publicaran. El filtro se quita ANTES de declarar los contextos
+# requeridos, no despues, porque ese orden es justamente el que evita colgar
+# el primer pull request de documentacion que llegue.
+#
+# El alcance, medido el 2026-08-07: 45 de los 190 ficheros del repositorio
+# casaban con la lista, incluidos los 17 ADR de `docs/adr/`. O sea que la
+# forma canonica de registrar una decision de arquitectura era tambien la
+# unica que no pasaba por CI.
+#
+# Es el cuarto incidente de la misma familia en el proyecto, y todos comparten
+# la forma: la verificacion falla en abierto y en silencio. Los otros tres
+# estan en el manifiesto de governance de 01-devops y en la seccion 13.2 de su
+# AGENTS.md.
+#
+# El coste de quitarlo es que un pull request de solo documentacion corre la
+# suite completa, unos 3 minutos. Si algun dia molesta, la solucion NO es
+# volver a poner `paths-ignore`, sino filtrar DENTRO del job: un primer step
+# que decida si hay trabajo y salga en verde si no lo hay. Asi el check se
+# sigue publicando.
 on:
   pull_request:
     branches: [main, dev]
-    # NB-7: skip the full CI suite for docs-only PRs. The whole ci.yml
-    # is bypassed (no sonar, no tests, no typecheck) when ALL paths
-    # touched by the PR match this list. The list is intentionally
-    # explicit - *.md and docs/** are too broad and would silently
-    # skip CI on PRs that touch a .md plus a code file (the GH
-    # paths-ignore filter is all-or-nothing per workflow run).
-    #
-    # This filter applies to pull_request only. The push trigger fires
-    # on dev/main merges; we want CI to run there to keep SonarCloud
-    # coverage and the new-code analysis fresh on the long-lived
-    # branches regardless of which paths the merge commit touched.
-    paths-ignore:
-      - 'docs/**'
-      - 'LICENSE'
-      - 'CHANGELOG.md'
-      - 'README.md'
-      - 'CONTRIBUTING.md'
-      - 'SECURITY.md'
-      - 'AGENTS.md'
-      - '.gitignore'
-      - '.gitattributes'
+    types: [opened, synchronize, reopened]
   push:
     branches: [main, dev]
 
@@ -84,6 +97,38 @@ jobs:
       working-directory: '.'
       npm-script: 'migrate:up'
       timeout-minutes: 10
+
+  # sam-validate: expande el transform AWS::Serverless-2016-10-31 y corre
+  # cfn-lint sobre el resultado, que es exactamente lo que hace CloudFormation
+  # al crear el changeset. Sin este gate, un template invalido solo se descubre
+  # desplegando: el 2026-08-05 los 10 errores del nested stack de identity
+  # (ThrottleSettings inexistente en HttpApi, Authorizer por !Ref en vez de por
+  # nombre) costaron un ciclo completo de deploy + rollback + limpieza del
+  # stack. `sam validate --lint` los reproduce en ~20 s.
+  #
+  # Inline y no reusable: 01-devops no tiene una receta de SAM (la que habia se
+  # borro en la limpieza de PR #201/#202, ver AGENTS.md §11).
+  #
+  # No necesita credenciales AWS: --lint es cfn-lint local. Solo la region,
+  # que se pasa por flag para no depender de la config del runner.
+  sam-validate:
+    name: "sam-validate-ci"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: setup-aws-sam-cli
+        uses: aws-actions/setup-sam@v3
+
+      # Los dos por separado: el root incluye el nested via AWS::CloudFormation::Stack
+      # con una Location local, que sam validate no sigue.
+      - name: validate-root-template
+        run: sam validate --template template.yaml --region us-east-1 --lint
+
+      - name: validate-identity-template
+        run: sam validate --template contexts/identity/template.yaml --region us-east-1 --lint
 
   actionlint:
     uses: spark-match/spark-match-01-devops/.github/workflows/reusable-actionlint.yml@main

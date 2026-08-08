@@ -4,8 +4,26 @@ on:
   push:
     branches: [main]
 
+# `write` en las dos, no `read`. Un workflow reutilizable NO puede escalar
+# por encima de lo que le concede quien lo llama: si el caller da menos de lo
+# que el reusable declara, GitHub aborta la ejecucion entera antes de arrancar
+# ningun job. Eso es lo que se veia como `startup_failure`, cinco seguidos
+# sobre main desde el 2026-08-04, sin un solo log que explicara nada porque no
+# llego a existir ningun step.
+#
+# reusable-release-please.yml declara `contents: write` (para el tag y el
+# commit del CHANGELOG) y `pull-requests: write` (para abrir el PR de
+# release). Aqui habia `contents: read` y nada de pull-requests.
+#
+# Los valores son los mismos que lleva spark-match-02-infrastructure, donde
+# este mismo reusable funciona.
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release-please:
