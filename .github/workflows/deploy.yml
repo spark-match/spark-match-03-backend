@@ -297,15 +297,42 @@ jobs:
           fi
           echo "Funcion migradora: ${FN}"
 
+          # Esperar a que la funcion este Active antes de invocarla.
+          #
+          # No es defensa generica: es el unico camino que este paso NO ha
+          # ejercitado nunca. Una Lambda creada CON VpcConfig nace en
+          # State=Pending mientras se le adjunta la ENI, y una invocacion
+          # sincrona durante esa ventana devuelve ResourceNotReadyException.
+          # En dev no se nota porque las 12 funciones se crearon SIN VPC el
+          # 2026-08-05 y la VPC se les colgo despues, en un UPDATE: ahi la
+          # funcion sigue Active con LastUpdateStatus=InProgress y el invoke
+          # nunca falla. El primer deploy de un entorno nuevo es un CREATE con
+          # VpcConfig desde el minuto cero, que es otra cosa.
+          #
+          # Que el escenario no esta probado no es una opinion: en el security
+          # group de las Lambdas de prod (sg-0a34e0825ff704d6d) han existido
+          # CERO interfaces de red en toda su historia.
+          aws lambda wait function-active-v2 --function-name "${FN}"
+
           # `--output text` sobre un campo ausente imprime literalmente None,
           # por eso la comparacion es exacta y no un test de cadena vacia.
+          #
+          # `--cli-read-timeout 0` quita el limite del CLI y deja que mande el
+          # Timeout de la Lambda. Por defecto botocore corta a los 60s, que es
+          # EXACTAMENTE el Timeout de la migradora: margen cero, y ademas un
+          # ReadTimeout es reintentable, asi que el CLI podria re-invocar una
+          # migracion todavia en curso. El segundo intento chocaria con el
+          # advisory lock de node-pg-migrate y moriria con "Another migration
+          # is already running": un fallo que no explica nada. Con
+          # AWS_MAX_ATTEMPTS=1 no hay segundo intento que explicar.
           run_migrate() {
             local direction="$1" out="$2"
             local fn_err
-            fn_err="$(aws lambda invoke \
+            fn_err="$(AWS_MAX_ATTEMPTS=1 aws lambda invoke \
               --function-name "${FN}" \
               --payload "{\"direction\":\"${direction}\"}" \
               --cli-binary-format raw-in-base64-out \
+              --cli-read-timeout 0 \
               --query 'FunctionError' --output text \
               "${out}")"
 
