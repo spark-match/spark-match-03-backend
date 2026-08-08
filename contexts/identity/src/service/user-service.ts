@@ -107,7 +107,18 @@ export interface UserService {
   register(input: RegisterInput): Promise<User>;
   authenticate(input: AuthenticateInput): Promise<User>;
   getUser(input: ActorTarget): Promise<User>;
-  changePassword(input: ActorTarget & { newPassword: string }): Promise<void>;
+  /**
+   * `currentPassword` is required when a user changes their OWN password, and
+   * is ignored when an admin changes somebody else's (they cannot know it).
+   *
+   * Without it, a leaked or stolen access token was enough to take over an
+   * account permanently: the endpoint required only a valid JWT, so an
+   * attacker could set a new password and lock the owner out, without ever
+   * knowing the old one.
+   */
+  changePassword(
+    input: ActorTarget & { newPassword: string; currentPassword?: string },
+  ): Promise<void>;
   updateUser(input: ActorTarget & { changes: UpdateUserInput }): Promise<User>;
   deactivateUser(input: ActorTarget): Promise<User>;
   activateUser(input: ActorTarget): Promise<User>;
@@ -237,7 +248,7 @@ export function createUserService(deps: {
       });
     },
 
-    async changePassword({ actorUserId, targetUserId, newPassword }) {
+    async changePassword({ actorUserId, targetUserId, newPassword, currentPassword }) {
       const result = await withTransaction(deps.db, async (tx) => {
         const userRepo = deps.userRepository.withDb(tx);
         const auditRepo = deps.auditRepository.withDb(tx);
@@ -257,6 +268,31 @@ export function createUserService(deps: {
         const target = await userRepo.findById(targetUserId);
         if (!target) {
           throw ApiError.userNotFound();
+        }
+
+        // Re-authenticate on self-service. An admin acting on someone else is
+        // exempt because they cannot know that person's password; their
+        // authority already comes from the isAdmin branch above.
+        //
+        // 401 and not 400 on purpose: this is a failed authentication attempt,
+        // not a malformed request.
+        //
+        // No audit row is written on rejection, and that is not an oversight.
+        // Every write in this method runs inside `withTransaction`, so a row
+        // inserted here would be rolled back by the throw on the very next
+        // line -- an audit trail that records nothing while looking like it
+        // records something. If rejected attempts need to be auditable, the
+        // insert has to happen on its own connection, outside this
+        // transaction, and that is a deliberate change rather than a line
+        // added here.
+        if (isSelf) {
+          if (!currentPassword) {
+            throw ApiError.unauthorized('Current password is required');
+          }
+          const valid = await verifyPassword(currentPassword, actor.passwordHash);
+          if (!valid) {
+            throw ApiError.unauthorized('Current password is incorrect');
+          }
         }
 
         const passwordHash = await hashPassword(newPassword);

@@ -33,12 +33,23 @@ name: CI
 # volver a poner `paths-ignore`, sino filtrar DENTRO del job: un primer step
 # que decida si hay trabajo y salga en verde si no lo hay. Asi el check se
 # sigue publicando.
+#
+# `workflow_dispatch` esta aqui por una razon concreta, no por simetria con
+# 02-infrastructure. Reejecutar un run NO recoge un arreglo hecho en un
+# reusable: GitHub fija la definicion de los workflows llamados en el momento
+# en que el run se CREA, y un re-run reproduce esa version. El 2026-08-07
+# costo tres reejecuciones descubrirlo, sobre un fallo de commitlint que ya
+# estaba arreglado en 01-devops y que el run no podia ver.
+#
+# Sin un disparador manual, la unica forma de estrenar una receta corregida es
+# inventarse un commit. Con este, se lanza y ya esta.
 on:
   pull_request:
     branches: [main, dev]
     types: [opened, synchronize, reopened]
   push:
     branches: [main, dev]
+  workflow_dispatch:
 
 permissions:
   contents: read

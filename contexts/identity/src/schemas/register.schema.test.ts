@@ -81,8 +81,10 @@ describe('RegisterOutputSchema', () => {
       email: 'a@b.com',
       fullName: 'Ada',
       createdAt: '2026-01-01T00:00:00.000Z',
+      role: 'student',
     });
     expect(result.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(result.role).toBe('student');
   });
 
   it('rejects a non-uuid id', () => {
