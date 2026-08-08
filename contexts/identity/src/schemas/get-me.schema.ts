@@ -10,7 +10,11 @@ export const PublicUserSchema = z.object({
   email: z.email(),
   fullName: z.string(),
   age: z.number().int().min(13).max(120).nullable(),
-  role: z.literal('admin'),
+  // Must list every value in `USER_ROLES` (domain/user.ts). ADR-013 keeps this
+  // link manual on purpose, so `user.test.ts` asserts the two agree at runtime:
+  // widening the domain and forgetting this file publishes an OpenAPI contract
+  // that claims a role the API can no longer return.
+  role: z.enum(['admin', 'student']),
   active: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

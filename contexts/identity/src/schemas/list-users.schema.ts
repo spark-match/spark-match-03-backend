@@ -6,7 +6,7 @@ export const ListUsersInputSchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).optional(),
     cursor: z.string().optional(),
     active: z.enum(['true', 'false', 'all']).optional(),
-    role: z.enum(['admin']).optional(),
+    role: z.enum(['admin', 'student']).optional(),
   }).optional(),
 });
 export type ListUsersInput = z.infer<typeof ListUsersInputSchema>;
