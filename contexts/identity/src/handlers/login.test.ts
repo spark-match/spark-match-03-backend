@@ -84,7 +84,11 @@ describe('POST /login handler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body) as {
-      data: { accessToken: string; expiresIn: number; user: { id: string; email: string; fullName: string } };
+      data: {
+        accessToken: string;
+        expiresIn: number;
+        user: { id: string; email: string; fullName: string; role: string };
+      };
     };
     expect(body.data.accessToken).toBe(FAKE_JWT);
     expect(body.data.expiresIn).toBe(86400);
@@ -92,10 +96,36 @@ describe('POST /login handler', () => {
       id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f',
       email: 'a@b.com',
       fullName: 'Ada',
+      role: 'admin',
     });
     expect(mockSignForUser).toHaveBeenCalledWith(
       expect.objectContaining({ id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f', email: 'a@b.com' }),
     );
+  });
+
+  // El rol no viajaba en esta respuesta, y por eso el frontend guardaba un
+  // usuario sin rol y enseñaba el panel de administracion a cualquiera. Un
+  // `toEqual` sobre el objeto entero ya lo cubre, pero este caso comprueba el
+  // valor que de verdad importa: el que NO es admin.
+  it('devuelve el rol tambien cuando el usuario es student', async () => {
+    mockAuthenticate.mockResolvedValue({
+      id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f',
+      email: 'estudiante@b.com',
+      fullName: 'Estu Diante',
+      passwordHash: 'hashed',
+      age: 17,
+      role: 'student',
+      active: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
+      makeEvent({ email: 'estudiante@b.com', password: 'supersecret123' }),
+    )) as { statusCode: number; body: string };
+
+    const body = JSON.parse(result.body) as { data: { user: { role: string } } };
+    expect(body.data.user.role).toBe('student');
   });
 
   it('rejects invalid input with 400', async () => {

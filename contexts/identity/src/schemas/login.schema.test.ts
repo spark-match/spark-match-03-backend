@@ -35,9 +35,28 @@ describe('LoginOutputSchema', () => {
     const result = LoginOutputSchema.parse({
       accessToken: 'token',
       expiresIn: 86400,
-      user: { id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f', email: 'a@b.com', fullName: 'Ada' },
+      user: {
+        id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f',
+        email: 'a@b.com',
+        fullName: 'Ada',
+        role: 'student',
+      },
     });
     expect(result.user.fullName).toBe('Ada');
+    expect(result.user.role).toBe('student');
+  });
+
+  it('rechaza una respuesta de login sin rol', () => {
+    // El rol es obligatorio a proposito. Si fuera opcional, el cliente tendria
+    // que decidir que hacer cuando falta, y "no se el rol" acabaria tratandose
+    // como "es admin" en algun sitio, que es como empezo todo esto.
+    expect(() =>
+      LoginOutputSchema.parse({
+        accessToken: 'token',
+        expiresIn: 86400,
+        user: { id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f', email: 'a@b.com', fullName: 'Ada' },
+      }),
+    ).toThrow();
   });
 
   it('rejects a non-uuid user id', () => {
