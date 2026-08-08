@@ -55,8 +55,28 @@ sam build --config-env prod
 sam deploy --config-env prod --no-confirm-changeset
 ```
 
-`prod` configura `disable_rollback=true` — **un deploy fallido deja la
-stack en `UPDATE_ROLLBACK_FAILED`**, no se auto-rollbackea. Ver § 2.
+`prod` configura `disable_rollback=true` en `samconfig.toml`, **pero eso
+solo aplica a un `sam deploy` a mano como el de arriba**. El pipeline
+pasa `--no-disable-rollback` en la linea de comandos
+([deploy.yml](../.github/workflows/deploy.yml)) y un flag explicito del
+CLI gana sobre el fichero, asi que **por CI el rollback esta activo**.
+
+Las dos rutas fallan de forma distinta, y conviene saber cual estas
+usando antes de que falle:
+
+| ruta                                    | rollback    | estado tras un fallo              | se puede reintentar?            |
+| --------------------------------------- | ----------- | --------------------------------- | ------------------------------- |
+| CI (`deploy.yml`)                       | activo      | `ROLLBACK_COMPLETE` en un CREATE  | **no**, hay que borrar la stack |
+| manual (`sam deploy --config-env prod`) | desactivado | `CREATE_FAILED` / `UPDATE_FAILED` | si                              |
+
+La ironia importa el dia del primer deploy: **`ROLLBACK_COMPLETE` no
+admite update**. CloudFormation ve la stack existir, SAM emite un
+changeset de tipo UPDATE y la respuesta es `is in ROLLBACK_COMPLETE
+state and can not be updated`. Relanzar el workflow no arregla nada; hace
+falta un `aws cloudformation delete-stack` a mano antes de reintentar. Le
+paso a dev el 2026-08-05, que se borro y recreo cinco veces en una hora.
+
+Ver § 2.
 
 ### 1.4 Verificacin post-deploy
 
@@ -89,9 +109,19 @@ curl -sS -X POST "$API_URL/v1/auth/register" \
 deploy falla, SAM hace rollback al estado anterior. **No se requiere
 accin manual** salvo que la stack quede en estado inconsistente.
 
-### 2.2 Prod (rollback manual — `disable_rollback=true`)
+### 2.2 Prod (solo si desplegaste A MANO)
 
-SAM **no** hace rollback en prod. Procedimiento:
+Esta seccion aplica **unicamente al deploy manual**. Por CI el rollback
+esta activo (§ 1.3) y CloudFormation revierte solo; lo que queda tras un
+CREATE fallido es una stack en `ROLLBACK_COMPLETE` que hay que **borrar**,
+no continuar:
+
+```bash
+aws cloudformation delete-stack --stack-name spark-match-backend-prod
+aws cloudformation wait stack-delete-complete --stack-name spark-match-backend-prod
+```
+
+Para el caso manual, donde SAM **no** hace rollback, el procedimiento es:
 
 **Opcin A — re-deploy del SHA anterior** (preferida):
 
@@ -119,9 +149,21 @@ Si `continue-update-rollback` falla, la nica opcin es eliminar y
 recrear la stack (puede causar prdida de data efmera; Aurora + S3 +
 Secrets Manager son managed services, no se ven afectados).
 
-### 2.3 Aurora no se ve afectada
+### 2.3 La base de datos no se ve afectada
 
-Los datos viven en Aurora PostgreSQL (cluster aparte, Terraform).
+**No es Aurora.** `dev` y `prod` son instancias RDS PostgreSQL sueltas
+(`spark-match-dev-db` y `spark-match-prod-db`, `db.t4g.micro`,
+`MultiAZ=false`), no clusters Aurora. Importa porque cambia lo que se
+puede hacer cuando algo va mal: no hay lectores, ni failover, ni
+backtrack.
+
+Y hoy tampoco hay copia de la que tirar: `BackupRetentionPeriod=0`, cero
+snapshots y sin PITR. `DeletionProtection=true` impide borrar la
+instancia, que no es lo mismo que poder recuperar una fila. Encender
+retencion vive en `spark-match-02-infrastructure` y **tiene que estar
+antes de la primera escritura de prod**, no despues.
+
+Los datos viven en esa instancia (Terraform, aparte del stack de SAM).
 Rollback del cdigo Lambda **no** toca la DB. Si la versin `N` de la
 app introdujo una migracin `V00N`, hacer rollback a `N-1` no revierte
 la migracin — usar `node-pg-migrate down` (§ 3).
@@ -252,9 +294,29 @@ curl -sS "$API_URL/v1/users" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-Como `register` crea un user con `role = 'admin'` (default 003), este
-smoke test puede listar users. En prod, hacer bootstrap con un usuario
-admin dedicado (no documentado an, ver § 8 gaps).
+**Esto ya no es cierto y espera un 403.** Decia que `register` crea un
+user con `role = 'admin'` por el DEFAULT de la 003. Desde la migracion
+005 el alta publica crea `student`, y no por el DEFAULT de la columna:
+`infra/user-repository.ts` escribe `role: DEFAULT_ROLE` explicitamente en
+cada INSERT, con `DEFAULT_ROLE = SELF_REGISTRATION_ROLE = 'student'`. El
+DEFAULT de la tabla no se consulta nunca.
+
+Consecuencia para un entorno nuevo: **nace sin ningun administrador**, y
+`/v1/users` y `/v1/audit` responden 403 a todo el mundo. No hay camino por
+API para conceder el rol -- `handlers/update-user.ts` valida con
+`UpdateProfileInputSchema`, que solo declara `fullName` y `age`, asi que
+Zod descarta `role`; y `setRole` de `infra/user-repository.ts` no tiene
+ningun llamador fuera de los tests.
+
+La salida es una migracion que promueva una cuenta ya registrada, y tiene
+que **afirmarse a si misma**: un `UPDATE ... WHERE email = '...'` que
+toque 0 filas es indistinguible del exito en todas las capas
+(node-pg-migrate marca la migracion como aplicada mire o no las filas
+afectadas, el `status` posterior sale vacio y el deploy imprime "Sin
+migraciones pendientes"). El patron correcto es un bloque `DO $$` que haga
+`RAISE EXCEPTION` si no encontro la fila: como el runner corre en una sola
+transaccion, el aborto se propaga y el gate de `FunctionError` del deploy
+lo ve.
 
 ### 4.5 Negative: 401 sin auth
 
@@ -389,7 +451,7 @@ aws pi describe-query-statistics \
 | `workflow_run` smoke test post-deploy                         | P2        | Sprint 2 #4                                                                                                                                                |
 | Self-healing stack reconcile                                  | P2        | Sprint 2 #2                                                                                                                                                |
 | Auto-migrate post-deploy                                      | P3        | Sprint 2 #3 (post-condition of #1)                                                                                                                         |
-| Bootstrap script for first admin user                         | P2        | No documentado; hoy `register` crea users con `role='admin'` (default 003)                                                                                 |
+| Bootstrap del primer admin                                    | **P1**    | Desde la 005 `register` crea `student`, asi que un entorno nuevo nace SIN ningun admin y los endpoints admin son inalcanzables. Ver § 4.4.                 |
 | Bootstrap seed migration                                      | P3        | Si se quiere sembrar admin sin API call                                                                                                                    |
 | Custom Lambda Permission `SourceArn` check                    | P3        | Sprint 2 #5                                                                                                                                                |
 | Aurora CA bundle in `node-runtime` layer                      | P2        | `build.sh` debe copiar `rds-ca-bundle.pem` al path `/var/task/certificates/rds.pem` esperado por `NODE_EXTRA_CA_CERTS`                                     |
