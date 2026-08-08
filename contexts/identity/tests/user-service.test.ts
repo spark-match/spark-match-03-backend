@@ -230,8 +230,9 @@ describe('userService.authenticate', () => {
 describe('userService.changePassword', () => {
   it('allows self to change own password', async () => {
     const deps = makeDeps();
+    const passwordHash = await hashPassword('currentPass123');
     deps.userRepository.findById.mockImplementation(async (id) =>
-      id === SELF_ID ? makeUser({ id: SELF_ID, active: true }) : null,
+      id === SELF_ID ? makeUser({ id: SELF_ID, active: true, passwordHash }) : null,
     );
     const service = createUserService(deps);
 
@@ -239,6 +240,7 @@ describe('userService.changePassword', () => {
       actorUserId: SELF_ID,
       targetUserId: SELF_ID,
       newPassword: 'newSecurePass456',
+      currentPassword: 'currentPass123',
     });
     expect(deps.userRepository.updatePassword).toHaveBeenCalledWith(
       SELF_ID,
@@ -279,6 +281,95 @@ describe('userService.changePassword', () => {
       }),
     ).rejects.toMatchObject({ statusCode: 403, code: 'forbidden' });
     expect(deps.userRepository.updatePassword).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Added 2026-08-08. Everything above tests the DEACTIVATED deny path; none of
+  // it tests the NON-ADMIN one, and that is not an oversight by whoever wrote
+  // them. `UserRole` was the single literal 'admin' and the column DEFAULT
+  // matched it, so there was no value you could put in `role` to make
+  // `!isSelf && !isAdmin` true. The branch was unreachable, and unreachable
+  // code cannot be tested. With `student` as a real role, it can.
+  // ---------------------------------------------------------------------------
+
+  it('forbids a student from changing another user password', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById.mockImplementation(async (id) =>
+      makeUser({ id, role: id === SELF_ID ? 'student' : 'admin', active: true }),
+    );
+    const service = createUserService(deps);
+
+    await expect(
+      service.changePassword({
+        actorUserId: SELF_ID,
+        targetUserId: OTHER_ID,
+        newPassword: 'newSecurePass456',
+        currentPassword: 'whatever',
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'forbidden' });
+    expect(deps.userRepository.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it('refuses a self-service change that does not carry the current password', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById.mockImplementation(async (id) =>
+      makeUser({ id, active: true }),
+    );
+    const service = createUserService(deps);
+
+    await expect(
+      service.changePassword({
+        actorUserId: SELF_ID,
+        targetUserId: SELF_ID,
+        newPassword: 'newSecurePass456',
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(deps.userRepository.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it('refuses a wrong current password and leaves the stored hash alone', async () => {
+    // The takeover this prevents: with only a stolen token and no knowledge of
+    // the old password, an attacker could previously set a new one and lock the
+    // owner out for good.
+    const deps = makeDeps();
+    const passwordHash = await hashPassword('currentPass123');
+    deps.userRepository.findById.mockImplementation(async (id) =>
+      makeUser({ id, active: true, passwordHash }),
+    );
+    const service = createUserService(deps);
+
+    await expect(
+      service.changePassword({
+        actorUserId: SELF_ID,
+        targetUserId: SELF_ID,
+        newPassword: 'newSecurePass456',
+        currentPassword: 'notTheRightOne',
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(deps.userRepository.updatePassword).not.toHaveBeenCalled();
+    expect(deps.eventPublisher.publish).not.toHaveBeenCalled();
+  });
+
+  it('does not demand a current password from an admin acting on someone else', async () => {
+    // An admin cannot know the target's password; their authority comes from
+    // the isAdmin branch. Requiring it would make the operation impossible
+    // rather than safer.
+    const deps = makeDeps();
+    deps.userRepository.findById.mockImplementation(async (id) =>
+      makeUser({ id, role: 'admin', active: true }),
+    );
+    const service = createUserService(deps);
+
+    await service.changePassword({
+      actorUserId: ADMIN_ID,
+      targetUserId: OTHER_ID,
+      newPassword: 'newSecurePass456',
+    });
+
+    expect(deps.userRepository.updatePassword).toHaveBeenCalledWith(
+      OTHER_ID,
+      expect.stringMatching(/^scrypt\$/),
+    );
   });
 });
 
@@ -331,6 +422,33 @@ describe('userService.getUser', () => {
     await expect(
       service.getUser({ actorUserId: ADMIN_ID, targetUserId: OTHER_ID }),
     ).rejects.toMatchObject({ statusCode: 404, code: 'not_found' });
+  });
+
+  // This is the case the endpoint is actually there to prevent, and until
+  // 2026-08-08 it could not be written: with `UserRole` = 'admin' alone, every
+  // actor satisfied isAdmin. A student reading someone else's row is what
+  // exposed every user's email through GET /v1/users.
+  it('forbids a student from reading another user', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById.mockImplementation(async (id) =>
+      makeUser({ id, role: id === SELF_ID ? 'student' : 'admin', active: true }),
+    );
+    const service = createUserService(deps);
+
+    await expect(
+      service.getUser({ actorUserId: SELF_ID, targetUserId: OTHER_ID }),
+    ).rejects.toMatchObject({ statusCode: 403, code: 'forbidden' });
+  });
+
+  it('still lets a student read their own row', async () => {
+    const deps = makeDeps();
+    deps.userRepository.findById.mockImplementation(async (id) =>
+      makeUser({ id, role: 'student', active: true }),
+    );
+    const service = createUserService(deps);
+
+    const user = await service.getUser({ actorUserId: SELF_ID, targetUserId: SELF_ID });
+    expect(user.id).toBe(SELF_ID);
   });
 });
 
@@ -684,8 +802,9 @@ describe('userService - audit log writes', () => {
 
   it('changePassword writes user.password_changed with empty metadata', async () => {
     const deps = makeDeps();
+    const passwordHash = await hashPassword('currentPass123');
     deps.userRepository.findById.mockResolvedValue(
-      makeUser({ id: SELF_ID, role: 'admin' }),
+      makeUser({ id: SELF_ID, role: 'admin', passwordHash }),
     );
     const service = createUserService(deps);
 
@@ -693,6 +812,7 @@ describe('userService - audit log writes', () => {
       actorUserId: SELF_ID,
       targetUserId: SELF_ID,
       newPassword: 'newPass123',
+      currentPassword: 'currentPass123',
     });
 
     expect(deps.auditRepository.insert).toHaveBeenCalledWith({
