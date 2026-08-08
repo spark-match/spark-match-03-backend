@@ -61,13 +61,14 @@ todos los servicios externos y la wiring de red/VPC/secrets.
    └─────────────────────────────────┘
 
    ┌──────────────────────────────────────────────────────┐
-   │  Lambda Layers (2)                                   │
-   │  - spark-match-node-shared-${env}  (compiled shared)│
-   │  - spark-match-node-runtime-${env} (zod, middy,     │
-   │    powertools, kysely, pg, jose, ...)                │
+   │  Empaquetado: esbuild por funcion (sin layers)       │
+   │  - 11 funciones HTTP: BuildMethod esbuild, ESM,      │
+   │    salida .mjs, target node24, sourcemap             │
+   │  - migrate: BuildMethod makefile (bundle + los .sql  │
+   │    de migrations/ en /var/task/migrations)           │
    │                                                      │
-   │  RDS CA bundle: /var/task/certificates/rds.pem       │
-   │  (NODE_EXTRA_CA_CERTS) — must be in runtime layer    │
+   │  TLS a RDS: flag `ssl` del pool de pg / sslmode en   │
+   │  el DSN. Ya no se usa NODE_EXTRA_CA_CERTS.           │
    └──────────────────────────────────────────────────────┘
 
    ┌──────────────────────────────────────────────────────┐
@@ -153,7 +154,7 @@ attack surface).
 | Timeout | `15 s` | |
 | Tracing | `Active` (X-Ray) | |
 | Architecture | `x86_64` | |
-| Layers | `NodeSharedLayer` + `NodeRuntimeLayer` | See § 4 |
+| Empaquetado | `BuildMethod: esbuild` por funcion | See § 4 |
 
 ### 2.2 Per-function overrides
 
@@ -297,17 +298,25 @@ See [`shared/src/auth/require-auth.ts`](../shared/src/auth/require-auth.ts) for 
 
 ---
 
-## 4. Lambda layers
+## 4. Empaquetado (esbuild, sin layers)
 
-Two layers built from [`layers/`](../layers/):
+Ya no hay Lambda layers. Cada funcion se empaqueta con `BuildMethod: esbuild`
+declarado en su `Metadata`, que bundlea el TypeScript del handler junto con
+`@spark-match/shared` y las dependencias de terceros dentro del artefacto.
 
-| Layer | Source | Contents |
+| Funcion | BuildMethod | Notas |
 |---|---|---|
-| `spark-match-node-shared-${Environment}` | `./layers/node-shared/dist` | Compiled `@spark-match/shared` (auth, http, events, infra, logger, templates) |
-| `spark-match-node-runtime-${Environment}` | `./layers/node-runtime` | Third-party runtime deps: `zod`, `middy`, `@aws-lambda-powertools/*`, `kysely`, `pg`, `jose`, `@middy/core` |
+| Las 11 con ruta HTTP + el authorizer | `esbuild` | `Format: esm`, `OutExtension: .js=.mjs`, `Target: node24`, `Sourcemap: true`, `External: pg-native` |
+| `IdentityMigrateFunction` | `makefile` | Mismo bundle, mas `cp -R migrations/` al artefacto: el handler los lee con `resolve(process.cwd(), 'migrations')` |
 
-Both target `nodejs24.x`. Retention policy: `Retain` (layer versions are
-not deleted on stack removal to avoid breaking dependent Lambdas).
+Por que se eliminaron los layers:
+
+- El `CodeUri` apuntaba a `.ts` crudo y ninguna Lambda podia arrancar; los
+  layers tampoco se construian bien.
+- Habia drift de versiones entre lo que traia `node-runtime` y lo que declaraba
+  el workspace (zod, kysely).
+- `build:shared` sigue siendo necesario antes de `sam build`, porque el
+  `exports` map de `@spark-match/shared` apunta a `./dist`.
 
 ---
 

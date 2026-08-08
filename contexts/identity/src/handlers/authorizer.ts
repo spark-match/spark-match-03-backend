@@ -10,7 +10,8 @@
 // which avoids the need for IAM permissions on the Authorizer Lambda to
 // invoke downstream Lambdas. The Authorizer only needs:
 //   - SecretsManagerRead on the JWT secret ARN
-//   - SSM:Get on /spark-match/secret/jwt-arn
+//   - SSM:Get on /spark-match/{environment}/config/jwt-secret-arn
+//     (contrato ADR-0002; el path lo arma ssmConfigPath desde ENVIRONMENT)
 //
 // Output shape (Simple Response):
 //   {

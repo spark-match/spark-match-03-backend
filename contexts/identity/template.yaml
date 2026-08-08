@@ -8,13 +8,11 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-  HttpApiId:
-    Type: String
-    Description: HTTP API Gateway ID (from root stack)
-  NodeSharedLayerArn:
-    Type: String
-  NodeRuntimeLayerArn:
-    Type: String
+  LogRetentionInDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 180, 365]
+    Description: CloudWatch Logs retention for the identity Lambdas.
   VpcSubnetIds:
     Type: CommaDelimitedList
     Default: ''
@@ -34,102 +32,209 @@ Globals:
     MemorySize: 512
     Timeout: 10
     Tracing: Active
-    Layers:
-      - !Ref NodeSharedLayerArn
-      - !Ref NodeRuntimeLayerArn
     Environment:
       Variables:
         POWERTOOLS_SERVICE_NAME: !Sub 'identity-${Environment}'
         ENVIRONMENT: !Ref Environment
-        EVENT_BUS_ARN: '{{resolve:ssm:/spark-match/eventbridge/bus-arn}}'
-        DB_SECRET_ARN: '{{resolve:ssm:/spark-match/db/secret-arn}}'
         CORS_ALLOWED_ORIGINS: !Join [',', !Ref CorsAllowedOrigins]
-        JWT_SECRET_ARN: '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
-        # Node 24 no longer auto-loads Amazon CA certificates. The RDS CA
-        # bundle is shipped via the layer; point Node at it before opening
-        # any TLS connection to RDS.
-        NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
+        # Los bundles se generan con sourcemap; sin esta flag los stack traces
+        # de CloudWatch apuntan al JS bundleado en vez del TypeScript original.
+        NODE_OPTIONS: --enable-source-maps
 
 Conditions:
   HasVpcConfig: !Not [!Equals [!Join ['', !Ref VpcSubnetIds], '']]
 
 Resources:
+  # ===========================================================================
+  # API Gateway HTTP API v2
+  # ===========================================================================
+  # La API vive en ESTE stack, no en el raiz, por una restriccion dura del
+  # transform de SAM: el event source `HttpApi` exige que `ApiId` referencie un
+  # recurso AWS::Serverless::HttpApi del MISMO template. Pasarlo como parametro
+  # String desde el stack padre hacia fallar el transform con
+  # "ApiId must be a valid reference to an 'AWS::Serverless::HttpApi' resource
+  # in same template" en las 10 funciones con ruta HTTP -- no solo en
+  # `sam build`, sino tambien al crear el change set, porque el error lo emite
+  # el transform y no el CLI.
+  #
+  # El stack raiz re-exporta HttpApiUrl y HttpApiId desde los outputs de este
+  # stack, asi que los consumidores externos no ven el cambio.
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: !Sub 'Spark Match Backend API (${Environment})'
+      CorsConfiguration:
+        AllowOrigins: !Ref CorsAllowedOrigins
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        ExposeHeaders:
+          - X-Correlation-Id
+        MaxAge: 600
+      # El authorizer se declara aca, no como AWS::ApiGatewayV2::Authorizer
+      # suelto: el evento HttpApi de SAM espera en `Auth.Authorizer` el NOMBRE
+      # (string) de una entrada de este mapa. Con un `!Ref` a un recurso crudo,
+      # el transform aborta con
+      #   The method authorizer must be a string with a corresponding dict
+      #   entry in the api authorizer
+      # Cerrado por defecto: toda ruta nace protegida y las publicas se abren
+      # una por una con `Auth: { Authorizer: NONE }`. Antes era al reves (sin
+      # DefaultAuthorizer, cada ruta protegida opt-in), lo que funcionaba pero
+      # dejaba que una ruta nueva naciera abierta si alguien olvidaba el bloque
+      # Auth. Es tambien lo que exige cloudformation:S6333 ("AWS API Gateway
+      # should require authentication"), que marcaba este recurso como
+      # vulnerabilidad BLOCKER en SonarCloud.
+      #
+      # Hoy el efecto es identico: las mismas 2 rutas publicas y las mismas 8
+      # protegidas. Lo que cambia es cual es el default.
+      Auth:
+        DefaultAuthorizer: IdentityAuthorizer
+        Authorizers:
+          IdentityAuthorizer:
+            FunctionArn: !GetAtt IdentityAuthorizerFunction.Arn
+            AuthorizerPayloadFormatVersion: '2.0'
+            EnableSimpleResponses: true
+            # 0 = sin cache. El handler necesita ver revocaciones de rol al
+            # instante; el authorizer resuelve en ~10 ms.
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 0
+      # Throttling por ruta. En HTTP API v2 vive en el stage (RouteSettings),
+      # no en el evento: `ThrottleSettings` solo existe para el tipo Api (REST)
+      # y el transform lo rechaza con
+      #   property ThrottleSettings not defined for resource of type HttpApi
+      # Las claves son route keys "<METHOD> <path>". Limites de ADR-018.
+      RouteSettings:
+        'POST /v1/auth/register':
+          # anti-bot signup
+          ThrottlingRateLimit: 5
+          ThrottlingBurstLimit: 10
+        'POST /v1/auth/login':
+          # anti-brute-force IP-level
+          ThrottlingRateLimit: 5
+          ThrottlingBurstLimit: 10
+        'GET /v1/audit':
+          # query costosa: cursor pagination + joins a identity.audit_log
+          ThrottlingRateLimit: 20
+          ThrottlingBurstLimit: 40
+      Tags:
+        Project: spark-match
+        Environment: !Ref Environment
+
   IdentityRegisterLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-register-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityLoginLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-login-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityGetMeLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-get-me-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityUpdateProfileLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-update-profile-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityChangePasswordLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-change-password-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityListUsersLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-list-users-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityActivateUserLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-activate-user-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityDeactivateUserLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-deactivate-user-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityUpdateUserLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-update-user-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
   IdentityAuthorizerLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-identity-authorizer-${Environment}'
-      RetentionInDays: 14
+      RetentionInDays: !Ref LogRetentionInDays
+  # Estos dos faltaban: sin el LogGroup declarado, Lambda lo crea al primer
+  # invoke con retencion "Never expire", que no se puede corregir despues sin
+  # importarlo al stack.
+  IdentityMigrateLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-migrate-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  IdentityAuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-identity-audit-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
 
   IdentityRegisterFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - register.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-register-${Environment}'
       CodeUri: ./src/handlers
       Handler: register.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Register a new user (POST /v1/auth/register)
       Events:
         RegisterApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/auth/register
             Method: POST
-            # Edge throttling override: anti-bot signup (ADR-018).
-            ThrottleSettings:
-              RateLimit: 5.0
-              BurstLimit: 10
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
-        - SSMParameterReadPolicy:
-            ParameterName: !Sub 'spark-match-${Environment}-*'
+            # Throttling en HttpApi.RouteSettings ('POST /v1/auth/register').
+            # Publica a proposito: no se puede pedir un token teniendo que
+            # presentar uno. NONE anula el DefaultAuthorizer del HttpApi.
+            Auth:
+              Authorizer: NONE
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -138,25 +243,41 @@ Resources:
 
   IdentityLoginFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - login.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-login-${Environment}'
       CodeUri: ./src/handlers
       Handler: login.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Login user (POST /v1/auth/login)
       Events:
         LoginApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/auth/login
             Method: POST
-            # Edge throttling override: anti-brute-force IP-level (ADR-018).
-            ThrottleSettings:
-              RateLimit: 5.0
-              BurstLimit: 10
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+            # Throttling en HttpApi.RouteSettings ('POST /v1/auth/login').
+            # Publica a proposito, igual que register.
+            Auth:
+              Authorizer: NONE
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -165,23 +286,39 @@ Resources:
 
   IdentityGetMeFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - get-me.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-get-me-${Environment}'
       CodeUri: ./src/handlers
       Handler: get-me.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Get current user (GET /v1/users/me)
       Events:
         GetMeApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/me
             Method: GET
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -190,23 +327,39 @@ Resources:
 
   IdentityUpdateProfileFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - update-profile.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-update-profile-${Environment}'
       CodeUri: ./src/handlers
       Handler: update-profile.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Update own profile (PATCH /v1/users/me)
       Events:
         UpdateProfileApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/me
             Method: PATCH
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -215,23 +368,39 @@ Resources:
 
   IdentityChangePasswordFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - change-password.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-change-password-${Environment}'
       CodeUri: ./src/handlers
       Handler: change-password.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Change own password (PUT /v1/users/me/password)
       Events:
         ChangePasswordApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/me/password
             Method: PUT
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -240,23 +409,39 @@ Resources:
 
   IdentityListUsersFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - list-users.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-list-users-${Environment}'
       CodeUri: ./src/handlers
       Handler: list-users.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: List users (GET /v1/users) - admin only
       Events:
         ListUsersApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users
             Method: GET
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -265,25 +450,39 @@ Resources:
 
   IdentityActivateUserFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - activate-user.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-activate-user-${Environment}'
       CodeUri: ./src/handlers
       Handler: activate-user.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Activate user (POST /v1/users/{userId}/activate) - admin only
       Events:
         ActivateUserApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/activate
             Method: POST
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -292,25 +491,39 @@ Resources:
 
   IdentityDeactivateUserFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - deactivate-user.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-deactivate-user-${Environment}'
       CodeUri: ./src/handlers
       Handler: deactivate-user.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Deactivate user (POST /v1/users/{userId}/deactivate) - admin only
       Events:
         DeactivateUserApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/deactivate
             Method: POST
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -319,25 +532,39 @@ Resources:
 
   IdentityUpdateUserFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - update-user.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-update-user-${Environment}'
       CodeUri: ./src/handlers
       Handler: update-user.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Update user (PATCH /v1/users/{userId}) - admin only
       Events:
         UpdateUserApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/users/{userId}
             Method: PATCH
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - EventBridgePutEventsPolicy:
-            EventBusName: !Sub 'spark-match-events-${Environment}'
+              Authorizer: IdentityAuthorizer
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -355,52 +582,63 @@ Resources:
   # ===========================================================================
   IdentityAuthorizerFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - authorizer.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-authorizer-${Environment}'
       CodeUri: ./src/handlers
       Handler: authorizer.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: HttpApi Lambda Authorizer - verifies JWT and attaches userId/email/role to the request context
       Timeout: 10
       MemorySize: 256
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: !Sub 'identity-authorizer-${Environment}'
-          ENVIRONMENT: !Ref Environment
-          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/secret/jwt-arn}}'
-        - SSMParameterReadPolicy:
-            ParameterName: 'spark-match-secret-jwt-arn'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
-  # HttpApi Lambda Authorizer - reusable Authorizer reference. Routes opt in
-  # with `Auth: { Authorizer: !Ref IdentityAuthorizer }`.
-  IdentityAuthorizer:
-    Type: AWS::ApiGatewayV2::Authorizer
-    Properties:
-      ApiId: !Ref HttpApiId
-      AuthorizerType: REQUEST
-      AuthorizerPayloadFormatVersion: '2.0'
-      AuthorizerResultTtlInSeconds: 0
-      IdentitySource:
-        - $request.header.Authorization
-      AuthorizerUri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IdentityAuthorizerFunction.Arn}/invocations'
-
-  # Allow API Gateway to invoke the authorizer Lambda. Required when the
-  # authorizer is declared as AWS::ApiGatewayV2::Authorizer (SAM would
-  # otherwise auto-create this permission for inline Auth events).
+  # El AWS::ApiGatewayV2::Authorizer lo genera SAM a partir de
+  # HttpApi.Auth.Authorizers.IdentityAuthorizer (ver el bloque Auth del
+  # recurso HttpApi). Declararlo a mano era lo que rompia el transform:
+  # `Auth.Authorizer` de un evento HttpApi tiene que nombrar una entrada de
+  # ese mapa, no apuntar por !Ref a un recurso crudo. Las rutas optan por el
+  # con `Auth: { Authorizer: IdentityAuthorizer }`.
+  #
+  # La AWS::Lambda::Permission, en cambio, SI hay que declararla: para
+  # authorizers de HttpApi, SAM no la crea (si lo hace para las funciones de
+  # cada ruta, y para authorizers de Api REST). Verificado contra el stack
+  # desplegado: get-me tenia su permission auto-generada
+  # (...IdentityGetMeFunctionGetMeApiPermission...) y el authorizer no tenia
+  # resource policy alguna, asi que API Gateway no podia invocarlo y toda
+  # ruta protegida devolvia 500 sin dejar rastro en CloudWatch (la Lambda
+  # nunca llegaba a ejecutarse).
   IdentityAuthorizerPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref IdentityAuthorizerFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApiId}/*'
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
 
   # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
@@ -413,29 +651,32 @@ Resources:
   # IAM-based auth (lambda:InvokeFunction) replaces the previous token-based
   # auth so there is no static secret to rotate and no HTTP surface to
   # attack.
+  #
+  # BuildMethod es `makefile` y no `esbuild` porque el artefacto necesita algo
+  # que esbuild no empaqueta: los 4 .sql de migrations/, que el handler lee en
+  # runtime con resolve(process.cwd(), 'migrations') = /var/task/migrations.
+  # Ver Makefile en este mismo directorio.
+  #
+  # El DSN ya no se inyecta por env var: se lee del SecureString
+  # /spark-match/{env}/config/db-connection-url en runtime. `{{resolve:ssm:}}`
+  # no descifra SecureString y `{{resolve:ssm-secure:}}` no esta soportado
+  # dentro de Environment.Variables de una Lambda.
   # ===========================================================================
   IdentityMigrateFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       FunctionName: !Sub 'spark-match-identity-migrate-${Environment}'
-      CodeUri: ./src/handlers
+      CodeUri: ./
       Handler: migrate.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Apply node-pg-migrate migrations against RDS (direct invoke, not HTTP)
       Timeout: 60
       MemorySize: 1024
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: !Sub 'identity-migrate-${Environment}'
-          ENVIRONMENT: !Ref Environment
-          # Resolved by Terraform from the same secret as the other
-          # identity Lambdas (DB_SECRET_ARN) at deploy time.
-          MIGRATE_DATABASE_URL: '{{resolve:ssm:/spark-match/db/connection-url}}'
-          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
-        - SSMParameterReadPolicy:
-            ParameterName: 'spark-match-${Environment}-db-connection-url'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -454,33 +695,43 @@ Resources:
   # ===========================================================================
   IdentityAuditFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        # Mismo banner que usa scripts/bundle-migrate.mjs.
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - audit.ts
     Properties:
       FunctionName: !Sub 'spark-match-identity-audit-${Environment}'
       CodeUri: ./src/handlers
       Handler: audit.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
       Description: Admin-only audit log read endpoint with filters + cursor pagination
       Events:
         AuditApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApiId
+            ApiId: !Ref HttpApi
             Path: /v1/audit
             Method: GET
-            # Edge throttling override: query costosa (cursor pagination +
-            # joins a identity.audit_log). ADR-018.
-            ThrottleSettings:
-              RateLimit: 20.0
-              BurstLimit: 40
+            # Throttling en HttpApi.RouteSettings ('GET /v1/audit').
             Auth:
-              Authorizer: !Ref IdentityAuthorizer
+              Authorizer: IdentityAuthorizer
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: !Sub 'identity-audit-${Environment}'
-          ENVIRONMENT: !Ref Environment
-          NODE_EXTRA_CA_CERTS: /var/task/certificates/rds.pem
-      Policies:
-        - SecretsManagerReadWritePolicy:
-            SecretArn: !Sub '{{resolve:ssm:/spark-match/db/secret-arn}}'
       VpcConfig: !If
         - HasVpcConfig
         - SubnetIds: !Ref VpcSubnetIds
@@ -512,3 +763,10 @@ Outputs:
     Value: !GetAtt IdentityAuthorizerFunction.Arn
   IdentityMigrateFunctionArn:
     Value: !GetAtt IdentityMigrateFunction.Arn
+
+  HttpApiUrl:
+    Description: HTTP API Gateway endpoint URL
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  HttpApiId:
+    Description: HTTP API Gateway ID
+    Value: !Ref HttpApi

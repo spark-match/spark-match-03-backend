@@ -54,7 +54,10 @@ on:
         description: 'Environment to deploy'
         required: true
         type: choice
-        options: [dev, staging, prod]
+        # `staging` no esta: no existe infraestructura para el (ni VPC, ni RDS,
+        # ni el rol spark-match-sam-deploy-staging). Dejarlo en la lista solo
+        # servia para lanzar deploys que fallan al asumir el rol.
+        options: [dev, prod]
         default: dev
 
 permissions:
@@ -73,7 +76,12 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    # `prod` mapea al GH Environment `production`, que ya tiene branch policy
+    # (solo main). Usar `environment: prod` haria que GitHub creara al vuelo un
+    # environment nuevo, sin ninguna proteccion. El sub del token OIDC pasa a
+    # ser `environment:production`, que es justo lo que el trust policy del rol
+    # de prod acepta (live/prod/main.tf: github_environment_name = "production").
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'dev' }}
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -88,23 +96,56 @@ jobs:
         uses: aws-actions/setup-sam@v3
 
       # ------------------------------------------------------------------
-      # Build workspace + lambda layers via the reusable node-build from
-      # spark-match-01-devops. The recipe manages npm cache + cache-key
-      # per the v4 cache-key convention (docs/CACHE.md) and runs an
-      # optional pre-build hook (here: build:shared) before the main
-      # build script (here: layer:build:all).
+      # Build workspace inline. A reusable workflow can only be invoked at
+      # the job level (jobs.<id>.uses), never as a step -- GitHub rejects
+      # the whole file at parse time with "reusable workflows should be
+      # referenced at the top-level jobs.*.uses key".
       #
-      # Replaces three inline steps (install-dependencies, build-shared,
-      # build-lambda-layers) with a single reusable call. The rest of
-      # the deploy workflow (OIDC, sam-build, sam-deploy) is unchanged.
+      # `build:shared` sigue siendo necesario aunque el empaquetado use
+      # esbuild: el package @spark-match/shared expone su `exports` map
+      # apuntando a ./dist, asi que sin compilarlo esbuild no resuelve los
+      # imports `@spark-match/shared/*` de los handlers.
+      #
+      # Ya no se construyen layers: cada funcion se empaqueta con
+      # `BuildMethod: esbuild` (o `makefile` en migrate).
       # ------------------------------------------------------------------
-      - name: build-workspace-and-layers
-        uses: spark-match/spark-match-01-devops/.github/workflows/reusable-node-build.yml@main
-        with:
-          environment-name: ${{ inputs.environment }}
-          node-version: '24'
-          pre-build-script: 'build:shared'
-          build-script: 'layer:build:all'
+      - name: install-dependencies
+        run: npm ci
+
+      - name: build-shared-workspace
+        run: npm run build:shared
+
+      # ------------------------------------------------------------------
+      # `sam build` invoca el NodejsNpmEsbuildBuilder, que resuelve el
+      # binario `esbuild` por PATH (o por el node_modules/.bin del CodeUri
+      # de cada funcion). Con npm workspaces, `npm ci` hoistea esbuild al
+      # node_modules de la raiz, que no esta en el PATH del runner: ni el
+      # CodeUri (`contexts/identity/src/handlers`) ni el PATH lo tienen, y
+      # el build muere con
+      #   Esbuild Failed: Cannot find esbuild. esbuild must be installed
+      #   on the host machine to use this feature.
+      #
+      # Se expone el .bin de la raiz en vez de `npm i -g esbuild` para que
+      # la version sea la que fija package-lock.json (0.28.1) y no una
+      # flotante que cambie entre corridas.
+      # ------------------------------------------------------------------
+      # IdentityMigrateFunction se empaqueta antes de `sam build`, desde la
+      # raiz del workspace. Su Makefile solo copia el resultado: el
+      # CustomMakeBuilder de SAM corre make en un scratch dir donde no hay
+      # node_modules ni `../../`, asi que ahi esbuild no resolveria nada.
+      - name: bundle-migrate-function
+        run: npm run bundle:migrate
+
+      - name: expose-esbuild-on-path
+        run: |
+          set -euo pipefail
+          BIN="${GITHUB_WORKSPACE}/node_modules/.bin"
+          if [ ! -x "${BIN}/esbuild" ]; then
+            echo "::error::${BIN}/esbuild no existe tras npm ci. Revisa que esbuild siga en devDependencies de la raiz."
+            exit 1
+          fi
+          echo "${BIN}" >> "$GITHUB_PATH"
+          "${BIN}/esbuild" --version
 
       # ------------------------------------------------------------------
       # OIDC credentials: assume spark-match-sam-deploy-<env> in the
@@ -124,12 +165,140 @@ jobs:
           role-to-assume: arn:aws:iam::681526276858:role/spark-match-sam-deploy-${{ inputs.environment }}
           aws-region: us-east-1
 
+      # ------------------------------------------------------------------
+      # Config de red y CORS desde SSM (contrato ADR-0002, publicado por
+      # modules/ssm-bootstrap en 02-infrastructure).
+      #
+      # Sin este paso las Lambdas quedan FUERA de la VPC: la condicion
+      # `HasVpcConfig` del template evalua a false cuando VpcSubnetIds llega
+      # vacio, que es exactamente lo que pasaba porque nadie pasaba el
+      # parametro. Una Lambda sin VPC no llega al RDS privado.
+      #
+      # Las comas NO se escapan. `sam deploy --parameter-overrides` separa
+      # los pares Key=Value por ESPACIOS, no por comas: un valor con comas
+      # viaja intacto y CloudFormation es quien parte el CommaDelimitedList.
+      # El escape `\,` que habia aca metia el backslash literal en el valor
+      # y Lambda rechazaba la subnet resultante:
+      #   Value '[subnet-...\, subnet-...]' at 'vpcConfig.subnetIds' failed
+      #   to satisfy constraint ... pattern: subnet-[0-9a-z]*
+      # ------------------------------------------------------------------
+      - name: read-network-and-cors-config-from-ssm
+        id: config
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          get() {
+            aws ssm get-parameter --name "/spark-match/${ENV_NAME}/config/$1" \
+              --query Parameter.Value --output text
+          }
+          SUBNETS="$(get private-subnet-ids)"
+          SGS="$(get lambda-security-group-id)"
+          CORS="$(get cors-allowed-origins)"
+
+          if [ -z "${SUBNETS}" ] || [ "${SUBNETS}" = "None" ]; then
+            echo "::error::/spark-match/${ENV_NAME}/config/private-subnet-ids vacio: las Lambdas quedarian fuera de la VPC y no alcanzarian RDS."
+            exit 1
+          fi
+
+          {
+            echo "subnets=${SUBNETS}"
+            echo "security-groups=${SGS}"
+            echo "cors=${CORS}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "subnets=${SUBNETS} | sgs=${SGS} | cors=${CORS}"
+
+      # `--use-container` no aplica: el empaquetado es esbuild + un makefile
+      # que solo llama a esbuild y copia migrations/. Levantar la imagen de
+      # build de Lambda solo agregaria minutos y una dependencia de Docker.
       - name: sam-build
-        run: sam build --use-container
+        run: sam build
 
       - name: sam-deploy
-        run: >
-          sam deploy
-          --config-env ${{ inputs.environment }}
-          --no-fail-on-empty-changeset
-          --no-disable-rollback
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+          RETENTION: ${{ inputs.environment == 'prod' && '365' || '14' }}
+          SUBNETS: ${{ steps.config.outputs.subnets }}
+          SGS: ${{ steps.config.outputs.security-groups }}
+          CORS: ${{ steps.config.outputs.cors }}
+        run: |
+          set -euo pipefail
+          sam deploy \
+            --config-env "${ENV_NAME}" \
+            --no-fail-on-empty-changeset \
+            --no-disable-rollback \
+            --parameter-overrides \
+              "Environment=${ENV_NAME}" \
+              "LogRetentionInDays=${RETENTION}" \
+              "VpcSubnetIds=${SUBNETS}" \
+              "VpcSecurityGroupIds=${SGS}" \
+              "CorsAllowedOrigins=${CORS}"
+
+      # ------------------------------------------------------------------
+      # Smoke test post-deploy. Un `sam deploy` verde solo dice que
+      # CloudFormation creo los recursos, NO que el codigo arranque: el
+      # 2026-08-05 el stack quedo en UPDATE_COMPLETE con las 12 funciones
+      # muertas en el init (bundle ESM sin el shim de createRequire) y con
+      # el authorizer ininvocable por falta de Lambda::Permission. Ambos
+      # bugs pasaron el deploy y solo apareceieron al pegarle a la API.
+      #
+      # Las dos sondas no escriben nada -- ni un usuario de prueba en RDS:
+      #
+      #   login con credenciales falsas -> 401
+      #     Discrimina "la funcion arranca y responde" de "murio en el
+      #     init". Un Init Error sale como 500.
+      #
+      #   users/me con un Bearer invalido -> 403
+      #     Discrimina "API Gateway puede invocar el authorizer" de "no
+      #     tiene permiso" (500). OJO: sin header Authorization la API
+      #     corta con 401 sin llegar a invocarlo, asi que esa variante no
+      #     prueba nada del authorizer.
+      # ------------------------------------------------------------------
+      - name: smoke-test
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+          BOGUS_TOKEN: smoke-probe-invalid
+        run: |
+          set -euo pipefail
+          API="$(aws cloudformation describe-stacks \
+            --stack-name "spark-match-backend-${ENV_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='HttpApiUrl'].OutputValue" \
+            --output text)"
+          if [ -z "${API}" ] || [ "${API}" = "None" ]; then
+            echo "::error::el stack no expone HttpApiUrl"
+            exit 1
+          fi
+          echo "API: ${API}"
+
+          probe() {
+            local name="$1" expected="$2" got="$3"
+            if [ "${got}" != "${expected}" ]; then
+              echo "::error::${name}: esperaba HTTP ${expected}, obtuvo ${got}"
+              return 1
+            fi
+            echo "  ok ${name}: HTTP ${got}"
+          }
+
+          LOGIN_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST "${API}/v1/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke-probe@invalid.local","password":"not-a-real-password"}')"
+
+          # El header se arma en una variable en vez de escribirlo inline en el
+          # curl: la regla `curl-auth-header` de gitleaks marca cualquier
+          # `-H "Authorization: ..."` literal, y tiene razon en hacerlo. El
+          # valor es un placeholder que el authorizer debe rechazar.
+          BOGUS_HEADER="Authorization: Bearer ${BOGUS_TOKEN}"
+          AUTHZ_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            "${API}/v1/users/me" -H "${BOGUS_HEADER}")"
+
+          FAILED=0
+          probe "login responde (handler vivo)" 401 "${LOGIN_CODE}" || FAILED=1
+          probe "authorizer invocable"          403 "${AUTHZ_CODE}" || FAILED=1
+
+          if [ "${FAILED}" -ne 0 ]; then
+            echo "::error::El deploy creo los recursos pero la API no responde como debe. Revisa los log groups /aws/lambda/spark-match-identity-*-${ENV_NAME}."
+            exit 1
+          fi
+          echo "Smoke test OK."
