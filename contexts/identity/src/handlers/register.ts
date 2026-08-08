@@ -18,6 +18,7 @@ export const handler = buildHandler<RegisterInput, RegisterOutput>({
       email: user.email,
       fullName: user.fullName,
       createdAt: user.createdAt.toISOString(),
+      role: user.role,
     };
   },
 });
