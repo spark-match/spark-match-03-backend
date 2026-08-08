@@ -23,12 +23,26 @@
 -- user with their email, read the full audit log -- which stores IP and user
 -- agent of other people's logins -- and deactivate third-party accounts.
 --
--- ORDERING MATTERS. Apply this migration BEFORE deploying the code that sets
--- DEFAULT_ROLE = 'student'. The CHECK constraint is what enforces the allowed
--- values, so if the new code lands first, every INSERT violates the old
--- single-value CHECK and registration stops working entirely. Migration first,
--- deploy second. There is no automation for this: the migrate Lambda is
--- invoked by hand (see template.yaml:646).
+-- ORDERING. An earlier version of this header said to apply the migration
+-- BEFORE deploying the code that sets DEFAULT_ROLE = 'student'. That advice
+-- was impossible to follow and has been removed.
+--
+-- It is impossible because the .sql files travel INSIDE the migration
+-- Lambda's own artefact: scripts/bundle-migrate.mjs copies migrations/ into
+-- the bundle and the handler reads them at runtime from /var/task/migrations.
+-- Invoking the Lambda before `sam deploy` therefore runs the OLD artefact,
+-- which has never heard of this file and answers `{"applied":[]}` -- success
+-- with nothing applied. That is exactly what happened on 2026-08-08.
+--
+-- The hazard the old header described is real, though. Between the moment the
+-- new code goes live and the moment this migration lands, every registration
+-- inserts role='student' against the old single-value CHECK and fails. The
+-- window cannot be eliminated by reordering; it can only be made short.
+--
+-- So it is now automated instead: .github/workflows/deploy.yml runs the step
+-- `apply-database-migrations` immediately after `sam deploy`, in the same job,
+-- and fails the deploy if any migration errors or if anything is still
+-- pending afterwards. The window is the seconds between those two steps.
 --
 -- EXISTING ROWS ARE LEFT AS 'admin' ON PURPOSE.
 --

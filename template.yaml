@@ -118,3 +118,16 @@ Outputs:
     Value: !Join [',', !Ref VpcSecurityGroupIds]
     Export:
       Name: !Sub 'spark-match-${Environment}-IdentityStackVpcSecurityGroupIds'
+
+  # Lo lee el paso `apply-database-migrations` de .github/workflows/deploy.yml
+  # con `describe-stacks`, para no reconstruir a mano el nombre de la funcion.
+  # El nested stack ya exponia este valor (contexts/identity/template.yaml);
+  # aqui solo se re-exporta, como se hizo con HttpApiUrl.
+  #
+  # SIN `Export:`, a diferencia de los cuatro de arriba, y es deliberado:
+  # `describe-stacks` lee los Outputs exporte o no. Un Export es un nombre
+  # global que ademas congela el valor mientras alguien lo importe, y aqui no
+  # lo importa nadie. Anadirlo por simetria seria decorado con consecuencias.
+  IdentityMigrateFunctionArn:
+    Description: ARN of the migration Lambda, invoked by the deploy pipeline after sam deploy
+    Value: !GetAtt IdentityStack.Outputs.IdentityMigrateFunctionArn
