@@ -14,12 +14,22 @@
 import type { Kysely, Transaction } from 'kysely';
 import { withDbErrorMapping } from '@spark-match/shared/infra';
 import type { User, CreateUserInput, UserRole, UpdateUserInput } from '../domain/user.js';
+import { SELF_REGISTRATION_ROLE } from '../domain/user.js';
 import type { Database } from './database.js';
 
 export type { Database } from './database.js';
 
 const IDENTITY = 'identity';
-const DEFAULT_ROLE: UserRole = 'admin';
+
+/**
+ * The role a newly created user gets. Was 'admin' until 2026-08-08, which made
+ * every visitor who registered an administrator -- see migration 005 for the
+ * full account.
+ *
+ * It reads from the domain constant rather than repeating the literal, so the
+ * value cannot drift from `USER_ROLES` or from the CHECK constraint.
+ */
+const DEFAULT_ROLE: UserRole = SELF_REGISTRATION_ROLE;
 
 export interface ListUsersFilters {
   limit: number;

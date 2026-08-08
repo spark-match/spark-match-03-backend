@@ -24,6 +24,7 @@ export const handler = buildHandler<ChangePasswordInput, ChangePasswordOutput>({
       actorUserId: auth.userId,
       targetUserId: auth.userId,
       newPassword: input.newPassword,
+      currentPassword: input.currentPassword,
     });
     ctx.logger.info('Password changed', { userId: auth.userId });
     return { message: 'password updated' };
