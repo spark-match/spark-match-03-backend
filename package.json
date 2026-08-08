@@ -11,6 +11,7 @@
   "scripts": {
     "build": "sam build",
     "build:shared": "npm run build --workspace=@spark-match/shared",
+    "bundle:migrate": "node scripts/bundle-migrate.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -24,9 +25,6 @@
     "local:api": "sam local start-api --port 3000",
     "local:invoke": "sam local invoke",
     "local:shell": "sam local start-lambda",
-    "layer:build:node-shared": "bash layers/node-shared/build.sh",
-    "layer:build:node-runtime": "bash layers/node-runtime/build.sh",
-    "layer:build:all": "npm run layer:build:node-shared && npm run layer:build:node-runtime",
     "generate:openapi": "tsx scripts/generate-openapi.ts",
     "migrate:create": "node-pg-migrate create --migrations-dir 'migrations' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public -- --helper false",
     "migrate:up": "node-pg-migrate up --migrations-dir 'migrations' --migration-file-language sql --migrations-table spark_match_migrations --migrations-schema public --schema public",

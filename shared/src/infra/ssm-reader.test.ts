@@ -113,6 +113,78 @@ describe('createSsmReader.getRequiredString', () => {
   });
 });
 
+describe('createSsmReader.getRequiredSecureString', () => {
+  it('passes decrypt: true so SSM returns the plaintext, not the ciphertext', async () => {
+    mockedGetParameter.mockResolvedValue('postgres://user:pass@host:5432/db');
+    const reader = createSsmReader();
+
+    expect(await reader.getRequiredSecureString('/spark-match/dev/config/db-connection-url')).toBe(
+      'postgres://user:pass@host:5432/db',
+    );
+    expect(mockedGetParameter).toHaveBeenCalledWith('/spark-match/dev/config/db-connection-url', {
+      maxAge: 300,
+      decrypt: true,
+      throwOnError: false,
+    });
+  });
+
+  it('uses the provided maxAge when supplied', async () => {
+    mockedGetParameter.mockResolvedValue('x');
+    const reader = createSsmReader();
+    await reader.getRequiredSecureString('name', 60);
+    expect(mockedGetParameter).toHaveBeenCalledWith('name', {
+      maxAge: 60,
+      decrypt: true,
+      throwOnError: false,
+    });
+  });
+
+  it('uses the reader default maxAge when not supplied', async () => {
+    mockedGetParameter.mockResolvedValue('x');
+    const reader = createSsmReader(120);
+    await reader.getRequiredSecureString('name');
+    expect(mockedGetParameter).toHaveBeenCalledWith('name', {
+      maxAge: 120,
+      decrypt: true,
+      throwOnError: false,
+    });
+  });
+
+  it('throws ApiError.internal when the value is missing', async () => {
+    mockedGetParameter.mockResolvedValue(undefined);
+    const reader = createSsmReader();
+
+    await expect(reader.getRequiredSecureString('p')).rejects.toMatchObject({
+      statusCode: 500,
+      message: 'Required SSM parameter not found or empty: p',
+    });
+  });
+
+  it('wraps non-ApiError throw into ApiError.awsUnavailable', async () => {
+    mockedGetParameter.mockRejectedValue(new Error('kms denied'));
+    const reader = createSsmReader();
+
+    await expect(reader.getRequiredSecureString('p')).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'service_unavailable',
+      details: [
+        {
+          code: 'aws.unavailable',
+          meta: { dependency: 'SSM' },
+        },
+      ],
+    });
+  });
+
+  it('re-throws ApiError instances unchanged', async () => {
+    const original = ApiError.internal('boom');
+    mockedGetParameter.mockRejectedValue(original);
+    const reader = createSsmReader();
+
+    await expect(reader.getRequiredSecureString('p')).rejects.toBe(original);
+  });
+});
+
 describe('createSsmReader.invalidate', () => {
   it('fetches with forceFetch when a name is provided', () => {
     mockedGetParameter.mockResolvedValue('x');
