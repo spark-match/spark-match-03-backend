@@ -64,6 +64,7 @@ describe('POST /register handler', () => {
       id: '3a8e6c4e-1f3a-4f0e-9a3d-1c2b3a4d5e6f',
       email: 'a@b.com',
       fullName: 'Ada',
+      role: 'student',
       createdAt,
     });
 
@@ -76,8 +77,11 @@ describe('POST /register handler', () => {
     )) as { statusCode: number; body: string };
 
     expect(result.statusCode).toBe(200);
-    const body = JSON.parse(result.body) as { data: { id: string; createdAt: string } };
+    const body = JSON.parse(result.body) as { data: { id: string; createdAt: string; role: string } };
     expect(body.data.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    // La respuesta dice el rol que acaba de conceder. Antes callaba, y cuando el
+    // rol concedido era 'admin' ese silencio fue parte de que nadie lo viera.
+    expect(body.data.role).toBe('student');
   });
 
   it('rejects invalid input with 400', async () => {
