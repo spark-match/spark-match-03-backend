@@ -29,6 +29,7 @@ export const handler = buildHandler<LoginInput, LoginOutput>({
         id: user.id,
         email: user.email,
         fullName: user.fullName,
+        role: user.role,
       },
     };
   },

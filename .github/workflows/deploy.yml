@@ -43,6 +43,11 @@
 #     DELETED in the stale-reusable cleanup (PR #201/#202 in 01-devops;
 #     see 01-devops/AGENTS.md §11). Re-introducing it would require a
 #     platform-team PR in 01-devops, out of scope here.
+#   - The `apply-database-migrations` step is inline for a different reason:
+#     the catalog has NO recipe that invokes a Lambda at all, and the closest
+#     one (reusable-migrations-dry-run.yml) cannot assume an AWS role. The
+#     step carries its own justification and the shape a future
+#     `reusable-lambda-invoke.yml` would need.
 # =============================================================================
 
 name: Deploy
@@ -234,6 +239,137 @@ jobs:
               "VpcSubnetIds=${SUBNETS}" \
               "VpcSecurityGroupIds=${SGS}" \
               "CorsAllowedOrigins=${CORS}"
+
+      # ------------------------------------------------------------------
+      # Migraciones de base de datos.
+      #
+      # VA DESPUES DE sam-deploy Y NO PUEDE IR ANTES. Los .sql viajan DENTRO
+      # del artefacto de la Lambda migradora: scripts/bundle-migrate.mjs los
+      # copia al bundle y el handler los lee en runtime de /var/task/migrations
+      # con resolve(process.cwd(), 'migrations'). Invocar antes de desplegar
+      # ejecuta el codigo viejo, que no conoce la migracion nueva y responde
+      # `{"applied":[]}`: exito aparente sin haber aplicado nada. La cabecera
+      # de migrations/005 llego a recomendar ese orden imposible; se corrigio
+      # en este mismo commit.
+      #
+      # Consecuencia que este paso elimina: entre que `sam deploy` termina y
+      # alguien se acuerda de invocar la Lambda a mano, el codigo nuevo corre
+      # contra el esquema viejo. Con la 005 eso significo que cada alta
+      # insertaba role='student' contra un CHECK que solo admitia 'admin', o
+      # sea registro roto durante una ventana que duraba lo que tardase el
+      # humano. Ahora dura lo que tarde este paso.
+      #
+      # Por que inline y no receta (AGENTS.md §12.2): en el catalogo de
+      # spark-match-01-devops no hay ninguna receta que invoque Lambdas -- un
+      # grep de `aws lambda` sobre sus 28 reusables no devuelve ni una. La mas
+      # parecida, reusable-migrations-dry-run.yml, es incompatible por diseno
+      # y no por configuracion: corre migrate:up contra un postgres:17
+      # efimero y declara `permissions: contents: read` sin `id-token: write`,
+      # asi que no puede asumir un rol AWS ni alcanzar RDS. Que haria falta
+      # para consolidarlo: un `reusable-lambda-invoke.yml` con inputs
+      # {function-name, payload, role-arn, gh-environment}. No se propone hoy
+      # porque tendria un unico consumidor, que es exactamente como nacio la
+      # primitiva `aws-lambda-invoke` que 01-devops acabo borrando por no
+      # tener ninguno.
+      #
+      # LA TRAMPA, que es la razon de que este paso no sea una linea:
+      # `aws lambda invoke` termina con codigo 0 aunque la funcion reviente.
+      # El exit code describe la llamada a la API de Lambda, no el resultado
+      # del handler, y StatusCode vale 200 en los dos casos. migrate.ts no
+      # captura sus errores, los relanza (handlers/migrate.ts:162-166), y ese
+      # throw se manifiesta unicamente como FunctionError en la respuesta del
+      # invoke. Gatear en cualquier otro sitio deja pasar en verde una
+      # migracion fallida.
+      # ------------------------------------------------------------------
+      - name: apply-database-migrations
+        env:
+          ENV_NAME: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+
+          FN="$(aws cloudformation describe-stacks \
+            --stack-name "spark-match-backend-${ENV_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='IdentityMigrateFunctionArn'].OutputValue" \
+            --output text)"
+          if [ -z "${FN}" ] || [ "${FN}" = "None" ]; then
+            echo "::error::el stack no expone IdentityMigrateFunctionArn"
+            exit 1
+          fi
+          echo "Funcion migradora: ${FN}"
+
+          # Esperar a que la funcion este Active antes de invocarla.
+          #
+          # No es defensa generica: es el unico camino que este paso NO ha
+          # ejercitado nunca. Una Lambda creada CON VpcConfig nace en
+          # State=Pending mientras se le adjunta la ENI, y una invocacion
+          # sincrona durante esa ventana devuelve ResourceNotReadyException.
+          # En dev no se nota porque las 12 funciones se crearon SIN VPC el
+          # 2026-08-05 y la VPC se les colgo despues, en un UPDATE: ahi la
+          # funcion sigue Active con LastUpdateStatus=InProgress y el invoke
+          # nunca falla. El primer deploy de un entorno nuevo es un CREATE con
+          # VpcConfig desde el minuto cero, que es otra cosa.
+          #
+          # Que el escenario no esta probado no es una opinion: en el security
+          # group de las Lambdas de prod (sg-0a34e0825ff704d6d) han existido
+          # CERO interfaces de red en toda su historia.
+          aws lambda wait function-active-v2 --function-name "${FN}"
+
+          # `--output text` sobre un campo ausente imprime literalmente None,
+          # por eso la comparacion es exacta y no un test de cadena vacia.
+          #
+          # `--cli-read-timeout 0` quita el limite del CLI y deja que mande el
+          # Timeout de la Lambda. Por defecto botocore corta a los 60s, que es
+          # EXACTAMENTE el Timeout de la migradora: margen cero, y ademas un
+          # ReadTimeout es reintentable, asi que el CLI podria re-invocar una
+          # migracion todavia en curso. El segundo intento chocaria con el
+          # advisory lock de node-pg-migrate y moriria con "Another migration
+          # is already running": un fallo que no explica nada. Con
+          # AWS_MAX_ATTEMPTS=1 no hay segundo intento que explicar.
+          run_migrate() {
+            local direction="$1" out="$2"
+            local fn_err
+            fn_err="$(AWS_MAX_ATTEMPTS=1 aws lambda invoke \
+              --function-name "${FN}" \
+              --payload "{\"direction\":\"${direction}\"}" \
+              --cli-binary-format raw-in-base64-out \
+              --cli-read-timeout 0 \
+              --query 'FunctionError' --output text \
+              "${out}")"
+
+            cat "${out}"
+            echo
+
+            if [ "${fn_err}" != "None" ]; then
+              echo "::error::migrate ${direction} fallo (${fn_err}): $(jq -r '(.errorType // "?") + ": " + (.errorMessage // "?")' "${out}")"
+              return 1
+            fi
+
+            # El runtime de Node serializa solo errorType/errorMessage/trace:
+            # statusCode y code de ApiError NO viajan, asi que no sirve
+            # filtrar por ellos. Se comprueba la forma del exito en su lugar.
+            jq -e 'has("direction") and (.applied | type == "array") and (.log | type == "array")' \
+              "${out}" > /dev/null \
+              || { echo "::error::la respuesta de migrate ${direction} no cumple MigrateOutput"; return 1; }
+          }
+
+          run_migrate up /tmp/migrate-up.json
+          echo "Aplicadas en esta corrida: $(jq -c '.applied' /tmp/migrate-up.json)"
+
+          # NO se gatea sobre "applied no vacio". Un `up` sin nada pendiente
+          # devuelve [] y eso es exito legitimo -- es lo que pasa en la
+          # inmensa mayoria de deploys, que no traen migracion nueva.
+          #
+          # La asercion util es la de abajo: `status` corre en dryRun y
+          # devuelve en `applied` lo que QUEDA por aplicar. Si tras el `up`
+          # sigue quedando algo, el esquema no se corresponde con el codigo
+          # que se acaba de desplegar y el deploy no debe darse por bueno.
+          run_migrate status /tmp/migrate-status.json
+          PENDING="$(jq -c '.applied' /tmp/migrate-status.json)"
+          if [ "${PENDING}" != "[]" ]; then
+            echo "::error::quedan migraciones sin aplicar tras el up: ${PENDING}"
+            exit 1
+          fi
+          echo "Sin migraciones pendientes."
 
       # ------------------------------------------------------------------
       # Smoke test post-deploy. Un `sam deploy` verde solo dice que

@@ -20,13 +20,17 @@ describe('audit-service.listAuditEntries', () => {
     const service = createAuditService({ auditRepository: repo });
     await expect(
       service.listAuditEntries(
-        { userId: 'u-1', email: 'a@b.com', role: 'member' as never },
+        // Was `'member' as never`: the cast existed only because `UserRole`
+        // had a single value, so no real non-admin role could be written here.
+        // The test looked like it proved a non-admin is rejected while in
+        // production no such actor could exist. With `student` it is real.
+        { userId: 'u-1', email: 'a@b.com', role: 'student' },
         {},
       ),
     ).rejects.toMatchObject({
       statusCode: 403,
       code: 'forbidden',
-      details: [{ code: 'audit.admin_only', path: 'role', value: 'member' }],
+      details: [{ code: 'audit.admin_only', path: 'role', value: 'student' }],
     });
     expect(repo.list).not.toHaveBeenCalled();
   });

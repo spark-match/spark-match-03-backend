@@ -73,7 +73,7 @@ beforeEach(() => {
 describe('PUT /me/password handler', () => {
   it('changes password and returns 200 with confirmation', async () => {
     const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
-      withAuth(makeEvent({ newPassword: 'newSecurePass456' })),
+      withAuth(makeEvent({ currentPassword: 'oldPass123', newPassword: 'newSecurePass456' })),
     )) as { statusCode: number; body: string };
 
     expect(result.statusCode).toBe(200);
@@ -83,12 +83,35 @@ describe('PUT /me/password handler', () => {
       actorUserId: SELF_ID,
       targetUserId: SELF_ID,
       newPassword: 'newSecurePass456',
+      currentPassword: 'oldPass123',
     });
   });
 
   it('rejects too-short password with 400 (zod)', async () => {
     const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
-      withAuth(makeEvent({ newPassword: 'short' })),
+      withAuth(makeEvent({ currentPassword: 'oldPass123', newPassword: 'short' })),
+    )) as { statusCode: number; body: string };
+
+    expect(result.statusCode).toBe(400);
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  // Until 2026-08-08 this route asked only for `newPassword`, so a valid access
+  // token was enough to take an account over: set a new password and the owner
+  // is locked out, without the attacker ever knowing the old one. The two tests
+  // below are the ones that would have caught it.
+  it('rejects a request without the current password, before reaching the service', async () => {
+    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
+      withAuth(makeEvent({ newPassword: 'newSecurePass456' })),
+    )) as { statusCode: number; body: string };
+
+    expect(result.statusCode).toBe(400);
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty current password', async () => {
+    const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
+      withAuth(makeEvent({ currentPassword: '', newPassword: 'newSecurePass456' })),
     )) as { statusCode: number; body: string };
 
     expect(result.statusCode).toBe(400);
@@ -97,7 +120,7 @@ describe('PUT /me/password handler', () => {
 
   it('returns 401 when the authorizer context is missing', async () => {
     const result = (await (handler as unknown as (e: APIGatewayProxyEventV2) => Promise<{ statusCode: number; body: string }>)(
-      makeEvent({ newPassword: 'newSecurePass456' }),
+      makeEvent({ currentPassword: 'oldPass123', newPassword: 'newSecurePass456' }),
     )) as { statusCode: number; body: string };
 
     expect(result.statusCode).toBe(401);
