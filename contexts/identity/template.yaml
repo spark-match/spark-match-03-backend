@@ -643,11 +643,29 @@ Resources:
   # ===========================================================================
   # IdentityMigrateFunction - runs node-pg-migrate against RDS
   # ===========================================================================
-  # NOT exposed via HTTP. Invoked directly via:
+  # NOT exposed via HTTP.
+  #
+  # Normally nobody invokes this by hand: the `apply-database-migrations` step
+  # of .github/workflows/deploy.yml runs it right after `sam deploy` and fails
+  # the deploy if a migration errors or if anything is left pending.
+  #
+  # To run it manually anyway (debugging, or a `down`):
   #   aws lambda invoke \
   #     --function-name spark-match-identity-migrate-dev \
   #     --payload '{"direction":"up"}' \
+  #     --cli-binary-format raw-in-base64-out \
   #     out.json
+  #
+  # `--cli-binary-format raw-in-base64-out` is NOT optional and was missing
+  # from this comment until 2026-08-08. AWS CLI v2 treats --payload as base64
+  # by default, so without it the call dies with `Invalid base64`. See
+  # docs/runbook.md §3, which had it right all along.
+  #
+  # BEWARE when running it by hand: the command above exits 0 even when the
+  # migration fails. The exit code describes the Lambda API call, not the
+  # handler, and this handler throws rather than returning an error object.
+  # Read `FunctionError` in the response, or the contents of out.json.
+  #
   # IAM-based auth (lambda:InvokeFunction) replaces the previous token-based
   # auth so there is no static secret to rotate and no HTTP surface to
   # attack.
