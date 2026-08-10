@@ -76,8 +76,11 @@ export class ApiError extends Error {
     return new ApiError(422, message, { code: 'unprocessable_entity', details });
   }
 
-  static tooManyRequests(message = 'Too many requests'): ApiError {
-    return new ApiError(429, message, { code: 'too_many_requests' });
+  static tooManyRequests(
+    message = 'Too many requests',
+    details?: ErrorDetail | ErrorDetail[],
+  ): ApiError {
+    return new ApiError(429, message, { code: 'too_many_requests', details });
   }
 
   static internal(message = 'Internal server error', cause?: unknown): ApiError {
