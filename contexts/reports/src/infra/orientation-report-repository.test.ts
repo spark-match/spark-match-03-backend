@@ -240,6 +240,25 @@ describe('createOrientationReportRepository', () => {
       expect(await repo.markReady('r-1', COMPLETO)).toBeNull();
     });
 
+    it('failStalePending sólo toca los pendientes viejos de ese estudiante', async () => {
+      const db = buildDb({ numUpdatedRows: 2n });
+      const repo = createOrientationReportRepository(db as never);
+      const limite = new Date('2026-08-10T09:50:00.000Z');
+
+      const cerrados = await repo.failStalePending('u-1', limite, 'se perdió');
+
+      expect(cerrados).toBe(2);
+      expect(db.where).toHaveBeenCalledWith('user_id', '=', 'u-1');
+      expect(db.where).toHaveBeenCalledWith('status', '=', 'pending');
+      expect(db.where).toHaveBeenCalledWith('created_at', '<', limite);
+    });
+
+    it('failStalePending devuelve 0 cuando no había nada que cerrar', async () => {
+      const repo = createOrientationReportRepository(buildDb({}) as never);
+
+      expect(await repo.failStalePending('u-1', new Date(), 'x')).toBe(0);
+    });
+
     it('markFailed guarda el motivo', async () => {
       const db = buildDb({ ...FILA_PENDIENTE, status: 'failed', failure_reason: 'sin catálogo' });
       const repo = createOrientationReportRepository(db as never);

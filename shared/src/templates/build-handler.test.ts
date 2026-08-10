@@ -68,6 +68,31 @@ describe('buildHandler', () => {
     expect(body.meta.requestId).toBe('req-test-123');
   });
 
+  it('honours successStatusCode for endpoints that accept work instead of completing it', async () => {
+    // Report generation answers 202: the row is created `pending` and the
+    // artefact does not exist yet. A 200 would tell the client the resource is
+    // ready and contradict the polling loop the response itself starts.
+    const handler = (async () => ({ id: 'r-1' })) as unknown as Parameters<
+      typeof buildHandler
+    >[0]['handler'];
+    const wrapped = buildHandler({
+      inputSchema,
+      handler,
+      logger,
+      tracer,
+      requireAuth: false,
+      enableCors: false,
+      successStatusCode: 202,
+    });
+
+    const result = await (
+      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string }>
+    )(makeEvent({ name: 'Alice' }));
+
+    expect(result.statusCode).toBe(202);
+    expect(JSON.parse(result.body).success).toBe(true);
+  });
+
   it('returns 400 on invalid body', async () => {
     const handler = (async () => ({ ok: true })) as unknown as Parameters<
       typeof buildHandler
@@ -149,7 +174,9 @@ describe('buildHandler', () => {
     ev.requestContext.http.method = 'OPTIONS';
 
     const result = await (
-      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+      wrapped as unknown as (
+        e: unknown,
+      ) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev);
 
     // With no CORS_ALLOWED_ORIGINS env (and no Origin request header), the
@@ -193,14 +220,10 @@ describe('selectAllowOrigin', () => {
     ).toBe('https://app.example.com');
   });
   it('returns null when the request origin is not in the allowlist', () => {
-    expect(
-      selectAllowOrigin('https://evil.example.com', ['https://app.example.com']),
-    ).toBeNull();
+    expect(selectAllowOrigin('https://evil.example.com', ['https://app.example.com'])).toBeNull();
   });
   it('returns null when no Origin header is sent', () => {
-    expect(
-      selectAllowOrigin(undefined, ['https://app.example.com']),
-    ).toBeNull();
+    expect(selectAllowOrigin(undefined, ['https://app.example.com'])).toBeNull();
   });
 });
 
@@ -240,7 +263,9 @@ describe('inline CORS middleware with CORS_ALLOWED_ORIGINS env', () => {
     const ev = makeEventWithOrigin('https://app.example.com');
     ev.requestContext.http.method = 'OPTIONS';
     const result = (await (
-      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+      wrapped as unknown as (
+        e: unknown,
+      ) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev)) as { headers: Record<string, string> };
     expect(result.headers['Access-Control-Allow-Origin']).toBe('https://app.example.com');
     expect(result.headers['Vary']).toBe('Origin');
@@ -262,7 +287,9 @@ describe('inline CORS middleware with CORS_ALLOWED_ORIGINS env', () => {
     const ev = makeEventWithOrigin('https://evil.example.com');
     ev.requestContext.http.method = 'OPTIONS';
     const result = (await (
-      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+      wrapped as unknown as (
+        e: unknown,
+      ) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev)) as { headers: Record<string, string> };
     expect(result.headers['Access-Control-Allow-Origin']).toBeUndefined();
   });
@@ -282,7 +309,9 @@ describe('inline CORS middleware with CORS_ALLOWED_ORIGINS env', () => {
     });
     const ev = makeEventWithOrigin('https://app.example.com');
     const result = (await (
-      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+      wrapped as unknown as (
+        e: unknown,
+      ) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev)) as { headers: Record<string, string> };
     expect(result.headers['Access-Control-Allow-Origin']).toBe('https://app.example.com');
     expect(result.headers['Vary']).toBe('Origin');

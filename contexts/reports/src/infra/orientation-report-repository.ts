@@ -44,6 +44,7 @@ export interface OrientationReportRepository {
   listByUser(userId: string, limit?: number): Promise<OrientationReport[]>;
   markReady(id: string, input: CompleteReportInput): Promise<OrientationReport | null>;
   markFailed(id: string, reason: string): Promise<OrientationReport | null>;
+  failStalePending(userId: string, before: Date, reason: string): Promise<number>;
 }
 
 interface ReportRow {
@@ -236,6 +237,33 @@ export function createOrientationReportRepository(
           .returningAll()
           .executeTakeFirst()) as unknown as ReportRow | undefined;
         return row ? mapRow(row) : null;
+      });
+    },
+
+    /**
+     * Cierra como `failed` los informes que llevan demasiado tiempo en curso.
+     *
+     * Sin esto, el indice de un solo pendiente por estudiante deja de ser una
+     * proteccion y pasa a ser una condena: si la generacion muere a medias --
+     * la Lambda se queda sin tiempo, el agente no contesta, el proceso se cae
+     * -- la fila se queda en `pending` para siempre y ese estudiante no puede
+     * volver a pedir un informe nunca. El indice cumpliria exactamente lo que
+     * promete y el resultado seria peor que no tenerlo.
+     *
+     * Devuelve cuantas cerro, que es un numero que merece un log: si deja de
+     * ser cero de vez en cuando y pasa a serlo siempre, algo se esta muriendo
+     * en silencio.
+     */
+    async failStalePending(userId: string, before: Date, reason: string): Promise<number> {
+      return withDbErrorMapping('orientation_report.failStalePending', async () => {
+        const resultado = await base()
+          .updateTable('orientation_report')
+          .set({ status: 'failed', failure_reason: reason })
+          .where('user_id', '=', userId)
+          .where('status', '=', 'pending')
+          .where('created_at', '<', before)
+          .executeTakeFirst();
+        return Number(resultado.numUpdatedRows ?? 0);
       });
     },
 

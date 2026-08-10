@@ -56,6 +56,16 @@ export interface HandlerConfig<TInput, TOutput> {
   requireAuth?: boolean;
   /** When true (default), handle CORS preflight + add CORS headers on responses. */
   enableCors?: boolean;
+  /**
+   * Status code for a successful response. Defaults to 200.
+   *
+   * Exists for endpoints that accept work rather than complete it: report
+   * generation answers `202` because the row is created `pending` and the
+   * artefact does not exist yet (ADR-019 D4). Answering 200 there would tell
+   * the client the resource is ready, and the polling loop that follows would
+   * be contradicting the response that started it.
+   */
+  successStatusCode?: number;
 }
 
 interface ResponseLike {
@@ -147,10 +157,12 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
   APIGatewayProxyEventV2,
   APIGatewayProxyResultV2
 > {
-  const applyHeaders = (request: middy.Request<APIGatewayProxyEventV2, APIGatewayProxyResultV2>): void => {
+  const applyHeaders = (
+    request: middy.Request<APIGatewayProxyEventV2, APIGatewayProxyResultV2>,
+  ): void => {
     if (request.response === undefined || request.response === null) return;
     const resp = asResponse(request.response);
-    const headers = (resp.headers ?? {});
+    const headers = resp.headers ?? {};
     // Compute the dynamic allow-origin from the request's Origin header
     const requestOrigin = request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
     const allowOrigin = selectAllowOrigin(requestOrigin, CORS_ALLOWED_ORIGINS);
@@ -169,7 +181,8 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
       const method = request.event.requestContext?.http?.method;
       if (method === 'OPTIONS') {
         // Preflight: compute allow-origin from request's Origin header
-        const requestOrigin = request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
+        const requestOrigin =
+          request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
         const allowOrigin = selectAllowOrigin(requestOrigin, CORS_ALLOWED_ORIGINS);
         const preflightHeaders: Record<string, string> = {};
         if (allowOrigin !== null) {
@@ -211,7 +224,7 @@ export function buildHandler<TInput, TOutput>(
       const auth = config.requireAuth ? await requireAuth(event, config.logger) : undefined;
       const result = await config.handler(input, event, auth);
       return {
-        statusCode: 200,
+        statusCode: config.successStatusCode ?? 200,
         body: JSON.stringify(formatResponse(result, requestId)),
         headers: { 'Content-Type': 'application/json' },
       };
