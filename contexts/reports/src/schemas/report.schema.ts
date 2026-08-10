@@ -20,8 +20,8 @@ export const ReportObjectsSchema = z.object({
 });
 
 /**
- * El informe tal como lo ve el estudiante. Casi todo es nullable porque una
- * fila `pending` todavia no sabe nada de si misma, y decir `null` es mas
+ * El informe tal como lo ve el estudiante. Casi ningun campo es obligatorio,
+ * porque una fila `pending` no sabe nada de si misma: decir `null` es mas
  * honesto que inventar un valor por defecto.
  *
  * `bucket` NO sale. El nombre del bucket no le sirve de nada a quien consume

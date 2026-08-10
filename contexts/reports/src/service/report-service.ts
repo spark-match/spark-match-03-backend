@@ -83,7 +83,10 @@ export function createReportService(deps: ReportServiceDeps): ReportService {
      */
     async get({ actorUserId, reportId }) {
       const informe = await deps.reportRepository.findById(reportId);
-      if (!informe || informe.userId !== actorUserId) {
+      // Una sola condicion para los dos casos, y es lo que hace que no se
+      // puedan distinguir: si no existe, `?.userId` es undefined y tampoco
+      // coincide. Separarlos en dos ramas invita a dar dos mensajes.
+      if (informe?.userId !== actorUserId) {
         throw ApiError.notFound('Report');
       }
       return informe;
