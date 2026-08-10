@@ -78,7 +78,7 @@ export interface HandlerConfig<TInput, TOutput> {
  * que guarda la fila describe esos bytes exactos, y reempaquetarlos haria que
  * el checksum dejara de servir para comprobar lo que el cliente recibio.
  *
- * Todo lo demas del pipeline sigue puesto: auth, CORS, trazas y el manejo de
+ * El resto del pipeline sigue puesto: auth, CORS, trazas y el manejo de
  * errores. Lo unico que cambia es la forma de la respuesta con exito.
  */
 export interface RawPayload {
