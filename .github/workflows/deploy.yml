@@ -413,6 +413,16 @@ jobs:
       #     tiene permiso" (500). OJO: sin header Authorization la API
       #     corta con 401 sin llegar a invocarlo, asi que esa variante no
       #     prueba nada del authorizer.
+      #
+      #   reports con un Bearer invalido -> 403
+      #     La misma sonda contra la SEGUNDA API. Vale la pena repetirla
+      #     porque el contexto de informes reusa el Lambda authorizer de
+      #     identity por ARN, y con un ARN externo SAM no genera el
+      #     Lambda::Permission: va declarado a mano en
+      #     contexts/reports/template.yaml. Si ese recurso se cae o se
+      #     escribe mal, TODA ruta de informes responde 500 y el deploy
+      #     sigue saliendo verde -- exactamente el bug del 2026-08-05, en
+      #     un stack donde nadie lo estaba mirando.
       # ------------------------------------------------------------------
       - name: smoke-test
         env:
@@ -429,6 +439,16 @@ jobs:
             exit 1
           fi
           echo "API: ${API}"
+
+          REPORTS_API="$(aws cloudformation describe-stacks \
+            --stack-name "spark-match-backend-${ENV_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='ReportsHttpApiUrl'].OutputValue" \
+            --output text)"
+          if [ -z "${REPORTS_API}" ] || [ "${REPORTS_API}" = "None" ]; then
+            echo "::error::el stack no expone ReportsHttpApiUrl"
+            exit 1
+          fi
+          echo "API informes: ${REPORTS_API}"
 
           probe() {
             local name="$1" expected="$2" got="$3"
@@ -452,12 +472,16 @@ jobs:
           AUTHZ_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
             "${API}/v1/users/me" -H "${BOGUS_HEADER}")"
 
+          REPORTS_AUTHZ_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            "${REPORTS_API}/v1/reports" -H "${BOGUS_HEADER}")"
+
           FAILED=0
-          probe "login responde (handler vivo)" 401 "${LOGIN_CODE}" || FAILED=1
-          probe "authorizer invocable"          403 "${AUTHZ_CODE}" || FAILED=1
+          probe "login responde (handler vivo)"   401 "${LOGIN_CODE}" || FAILED=1
+          probe "authorizer invocable"            403 "${AUTHZ_CODE}" || FAILED=1
+          probe "authorizer invocable (informes)" 403 "${REPORTS_AUTHZ_CODE}" || FAILED=1
 
           if [ "${FAILED}" -ne 0 ]; then
-            echo "::error::El deploy creo los recursos pero la API no responde como debe. Revisa los log groups /aws/lambda/spark-match-identity-*-${ENV_NAME}."
+            echo "::error::El deploy creo los recursos pero la API no responde como debe. Revisa los log groups /aws/lambda/spark-match-identity-*-${ENV_NAME} y /aws/lambda/spark-match-reports-*-${ENV_NAME}."
             exit 1
           fi
           echo "Smoke test OK."
