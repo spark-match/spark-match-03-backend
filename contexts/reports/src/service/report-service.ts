@@ -10,6 +10,11 @@ import { ApiError } from '@spark-match/shared/http';
 import type { createLogger } from '@spark-match/shared/logger';
 import type { OrientationReport } from '../domain/orientation-report.js';
 import type { OrientationReportRepository } from '../infra/orientation-report-repository.js';
+import {
+  CONTENT_TYPES,
+  type ReportObjectKind,
+  type ReportObjectStore,
+} from '../infra/report-object-store.js';
 
 /**
  * Cuanto puede llevar un informe en curso antes de darlo por muerto.
@@ -23,14 +28,27 @@ const PENDIENTE_MUERTO_MS = 10 * 60 * 1000;
 
 const MOTIVO_CADUCADO = 'La generacion no termino a tiempo y se dio por perdida.';
 
+export interface ReportContent {
+  bytes: Buffer;
+  contentType: string;
+  /** Nombre sugerido para la descarga. Sin ruta y sin datos del estudiante. */
+  fileName: string;
+}
+
 export interface ReportService {
   request(input: { userId: string }): Promise<OrientationReport>;
   get(input: { actorUserId: string; reportId: string }): Promise<OrientationReport>;
   list(input: { actorUserId: string; limit?: number }): Promise<OrientationReport[]>;
+  getContent(input: {
+    actorUserId: string;
+    reportId: string;
+    kind: ReportObjectKind;
+  }): Promise<ReportContent>;
 }
 
 export interface ReportServiceDeps {
   reportRepository: OrientationReportRepository;
+  reportObjectStore: ReportObjectStore;
   // `ReturnType<typeof createLogger>` y no un `Logger` importado: el modulo de
   // shared no reexporta el tipo de powertools, y es como lo tipa composition.
   logger: ReturnType<typeof createLogger>;
@@ -40,6 +58,29 @@ export interface ReportServiceDeps {
 
 export function createReportService(deps: ReportServiceDeps): ReportService {
   const ahora = deps.now ?? (() => new Date());
+
+  /**
+   * El informe, si es de quien lo pide.
+   *
+   * Un informe ajeno responde 404 y no 403. Un 403 confirmaria que ese id
+   * existe, y lo que hay detras es el perfil psicometrico de un menor: la mera
+   * existencia de la fila ya es informacion sobre esa persona. Para quien no es
+   * el dueño, el informe no existe -- que es exactamente lo que el 404 dice.
+   *
+   * Una sola condicion para los dos casos, y es lo que hace que no se puedan
+   * distinguir: si no existe, `?.userId` es undefined y tampoco coincide.
+   * Separarlos en dos ramas invita a dar dos mensajes.
+   */
+  async function propioODesaparecido(
+    actorUserId: string,
+    reportId: string,
+  ): Promise<OrientationReport> {
+    const informe = await deps.reportRepository.findById(reportId);
+    if (informe?.userId !== actorUserId) {
+      throw ApiError.notFound('Report');
+    }
+    return informe;
+  }
 
   return {
     /**
@@ -72,24 +113,65 @@ export function createReportService(deps: ReportServiceDeps): ReportService {
       return deps.reportRepository.create({ userId });
     },
 
-    /**
-     * Un informe, si es de quien lo pide.
-     *
-     * Un informe ajeno responde 404 y no 403. Un 403 confirmaria que ese id
-     * existe, y lo que hay detras es el perfil psicometrico de un menor: la
-     * mera existencia de la fila ya es informacion sobre esa persona. Para
-     * quien no es el dueño, el informe no existe -- que es exactamente lo que
-     * el 404 dice.
-     */
+    /** Un informe, si es de quien lo pide. Ver `propioODesaparecido`. */
     async get({ actorUserId, reportId }) {
-      const informe = await deps.reportRepository.findById(reportId);
-      // Una sola condicion para los dos casos, y es lo que hace que no se
-      // puedan distinguir: si no existe, `?.userId` es undefined y tampoco
-      // coincide. Separarlos en dos ramas invita a dar dos mensajes.
-      if (informe?.userId !== actorUserId) {
-        throw ApiError.notFound('Report');
+      return propioODesaparecido(actorUserId, reportId);
+    },
+
+    /**
+     * Los bytes de uno de los dos objetos del informe.
+     *
+     * El backend es registro y proxy (ADR-019 D3): sirve el fichero el mismo,
+     * con el JWT delante, en vez de repartir URLs firmadas. Una URL firmada o
+     * caduca -- y entonces la fila apunta a algo que ya no se puede abrir -- o
+     * no caduca, y entonces es una capacidad permanente sobre el perfil
+     * psicometrico de un menor que viaja por donde sea que viaje el enlace.
+     *
+     * Pasa por el MISMO control de propiedad que `get`, y por eso lo llama en
+     * vez de repetirlo: dos comprobaciones separadas se acaban desalineando, y
+     * la que se quede corta es la que sirve el contenido.
+     */
+    async getContent({ actorUserId, reportId, kind }): Promise<ReportContent> {
+      const informe = await propioODesaparecido(actorUserId, reportId);
+
+      // 409 y no 404: el informe existe y es suyo, lo que pasa es que todavia
+      // no tiene contenido. Un 404 aqui le diria que se ha equivocado de id,
+      // que es justo lo contrario de lo que ocurre, y le haria abandonar el
+      // sondeo que la respuesta 202 de `request` le pidio empezar.
+      if (informe.status !== 'ready') {
+        throw ApiError.conflict('The report is not ready yet', {
+          code: 'report.not_ready',
+          message:
+            informe.status === 'pending'
+              ? 'The report is still being generated.'
+              : 'The report generation failed, so it has no content.',
+          meta: { status: informe.status },
+        });
       }
-      return informe;
+
+      // La restriccion `orientation_report_ready_is_complete` de la migracion
+      // 006 ya impide que una fila `ready` llegue aqui sin bucket ni objects.
+      // La comprobacion se queda igualmente porque el tipo lo permite y
+      // porque, si algun dia falla, un 500 explicito se entiende y un
+      // `Cannot read properties of null` no.
+      if (informe.bucket === null || informe.objects === null) {
+        throw ApiError.internal(`El informe ${informe.id} esta ready pero sin objetos`);
+      }
+
+      const bytes = await deps.reportObjectStore.fetch({
+        bucket: informe.bucket,
+        objects: informe.objects,
+        kind,
+      });
+
+      return {
+        bytes,
+        contentType: CONTENT_TYPES[kind],
+        // El id y nada mas. Un nombre con el del estudiante o su codigo
+        // acabaria en la carpeta de descargas de cualquier ordenador
+        // compartido, que es exactamente donde no queremos que este.
+        fileName: `informe-orientacion-${informe.id}.${kind}`,
+      };
     },
 
     async list({ actorUserId, limit }) {

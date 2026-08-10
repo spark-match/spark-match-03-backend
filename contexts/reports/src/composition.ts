@@ -18,6 +18,7 @@ import {
   type Database,
   type OrientationReportRepository,
 } from './infra/orientation-report-repository.js';
+import { createReportObjectStore, type ReportObjectStore } from './infra/report-object-store.js';
 import { createReportService, type ReportService } from './service/report-service.js';
 
 export interface ReportsContext {
@@ -25,6 +26,7 @@ export interface ReportsContext {
   tracer: Tracer;
   db: Kysely<Database>;
   reportRepository: OrientationReportRepository;
+  reportObjectStore: ReportObjectStore;
   reportService: ReportService;
 }
 
@@ -41,9 +43,19 @@ export async function buildContext(): Promise<ReportsContext> {
 
     const db = await getDbConnection();
     const reportRepository = createOrientationReportRepository(db);
-    const reportService = createReportService({ reportRepository, logger });
+    // Sin `await`: construir el cliente de S3 no hace ninguna llamada de red,
+    // asi que no tiene sentido pagarlo en el arranque en frio como la conexion.
+    const reportObjectStore = createReportObjectStore();
+    const reportService = createReportService({ reportRepository, reportObjectStore, logger });
 
-    const built: ReportsContext = { logger, tracer, db, reportRepository, reportService };
+    const built: ReportsContext = {
+      logger,
+      tracer,
+      db,
+      reportRepository,
+      reportObjectStore,
+      reportService,
+    };
     context = built;
     return built;
   })();

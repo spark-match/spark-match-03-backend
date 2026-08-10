@@ -172,6 +172,16 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-reports-list-reports-${Environment}'
       RetentionInDays: !Ref LogRetentionInDays
+  ReportsGetReportContentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-get-report-content-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  ReportsGetReportPdfLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-get-report-pdf-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
 
   # ===========================================================================
   # Functions
@@ -284,6 +294,83 @@ Resources:
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
+  # Estas dos devuelven un fichero entero desde S3, no una fila. Mas memoria y
+  # mas tiempo que las otras tres: 512 MB y 10 s valen para una consulta a
+  # Postgres, no para descargar un PDF y devolverlo en base64.
+  ReportsGetReportContentFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - get-report-content.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-get-report-content-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: get-report-content.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Serve the report JSON (GET /v1/reports/{reportId}/content)
+      MemorySize: 1024
+      Timeout: 29
+      Events:
+        GetReportContentApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}/content
+            Method: GET
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  ReportsGetReportPdfFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - get-report-pdf.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-get-report-pdf-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: get-report-pdf.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Serve the report PDF (GET /v1/reports/{reportId}/pdf)
+      MemorySize: 1024
+      Timeout: 29
+      Events:
+        GetReportPdfApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}/pdf
+            Method: GET
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
 Outputs:
   ReportsCreateReportFunctionArn:
     Value: !GetAtt ReportsCreateReportFunction.Arn
@@ -291,6 +378,10 @@ Outputs:
     Value: !GetAtt ReportsGetReportFunction.Arn
   ReportsListReportsFunctionArn:
     Value: !GetAtt ReportsListReportsFunction.Arn
+  ReportsGetReportContentFunctionArn:
+    Value: !GetAtt ReportsGetReportContentFunction.Arn
+  ReportsGetReportPdfFunctionArn:
+    Value: !GetAtt ReportsGetReportPdfFunction.Arn
 
   ReportsHttpApiUrl:
     Description: Reports HTTP API Gateway endpoint URL
