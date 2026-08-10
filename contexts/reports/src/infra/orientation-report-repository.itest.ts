@@ -279,6 +279,78 @@ describe('el resto del repositorio contra la tabla de verdad', () => {
     expect(cerrado!.createdAt.getTime()).toBe(abierto.createdAt.getTime());
   });
 
+  it('chargeableUsage no cuenta los fallidos', async () => {
+    // Un informe que falló no le dio nada al estudiante, y casi siempre falló
+    // por algo nuestro. Cobrárselo sería hacerle pagar nuestra avería.
+    const repo = createOrientationReportRepository(db);
+    const listo = await repo.create({ userId });
+    await repo.markReady(listo.id, COMPLETO);
+    const roto = await repo.create({ userId });
+    await repo.markFailed(roto.id, 'sin pdf');
+
+    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+
+    expect(uso.total).toBe(1);
+  });
+
+  it('chargeableUsage cuenta el que está en curso', async () => {
+    // Es una llamada al modelo ya en marcha, y el tope se mide en llamadas.
+    const repo = createOrientationReportRepository(db);
+    await repo.create({ userId });
+
+    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+
+    expect(uso.total).toBe(1);
+  });
+
+  it('chargeableUsage deja fuera lo anterior a la ventana', async () => {
+    const repo = createOrientationReportRepository(db);
+    const abierto = await repo.create({ userId });
+    await repo.markReady(abierto.id, COMPLETO);
+
+    const uso = await repo.chargeableUsage(userId, new Date(Date.now() + 60_000));
+
+    expect(uso.total).toBe(0);
+    expect(uso.oldest).toBeNull();
+  });
+
+  it('chargeableUsage devuelve la fecha del más viejo, no la del más nuevo', async () => {
+    // Es lo que permite decir «puedes pedir otro a las diez» en vez de
+    // «dentro de veinticuatro horas», que estaría casi siempre mal.
+    const repo = createOrientationReportRepository(db);
+    const primero = await repo.create({ userId });
+    await repo.markReady(primero.id, COMPLETO);
+    await sql`SELECT pg_sleep(0.01)`.execute(db);
+    const segundo = await repo.create({ userId });
+
+    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+
+    expect(uso.total).toBe(2);
+    expect(uso.oldest?.getTime()).toBe(primero.createdAt.getTime());
+    expect(uso.oldest?.getTime()).toBeLessThan(segundo.createdAt.getTime());
+  });
+
+  it('chargeableUsage sólo mira los del estudiante que se le pide', async () => {
+    const repo = createOrientationReportRepository(db);
+    const otro = await crearUsuario('ajeno-tope@spark-match.test');
+    await repo.create({ userId: otro });
+
+    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+
+    expect(uso.total).toBe(0);
+  });
+
+  it('el total llega como número, no como el string del BIGINT', async () => {
+    // `COUNT(*)` es BIGINT y node-postgres lo trae como string. Sin el
+    // `Number`, `total >= tope` compara una cadena y '10' >= 3 es falso.
+    const repo = createOrientationReportRepository(db);
+    await repo.create({ userId });
+
+    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+
+    expect(typeof uso.total).toBe('number');
+  });
+
   it('borrar al estudiante se lleva sus informes', async () => {
     const repo = createOrientationReportRepository(db);
     const otro = await crearUsuario('borrame@spark-match.test');

@@ -45,9 +45,66 @@ export const ReportSchema = z.object({
 });
 export type Report = z.infer<typeof ReportSchema>;
 
-/** `POST /v1/reports` no lleva cuerpo: el dueño sale del JWT, no del body. */
-export const CreateReportInputSchema = z.object({});
+/**
+ * `POST /v1/reports`. El dueño sale del JWT y nunca del cuerpo; lo que si va
+ * en el cuerpo son las dos entradas de la puerta de D8, porque el backend no
+ * tiene forma de averiguarlas -- el perfil del estudiante vive en el store del
+ * agente.
+ *
+ * `riasecCode` es NULLABLE a proposito y no obligatorio. Que falte no es una
+ * peticion mal construida, es el caso normal de un estudiante que aun no ha
+ * terminado el assessment, y tiene que llegar al servicio para salir como un
+ * 409 con su codigo. Marcarlo requerido lo convertiria en un 400 de validacion
+ * -- "has montado mal la peticion" en vez de "preguntale al estudiante", que
+ * es justo la accion que el agente necesita que le indiquen.
+ */
+export const CreateReportInputSchema = z.object({
+  profileCompleteness: z.number().min(0).max(1),
+  riasecCode: z
+    .string()
+    .regex(/^[RIASEC]{3}$/, 'riasecCode must be three Holland letters')
+    .nullable(),
+});
 export const CreateReportOutputSchema = ReportSchema;
+export type CreateReportBody = z.infer<typeof CreateReportInputSchema>;
+
+/**
+ * `POST /v1/reports/{reportId}/complete` — lo que el generador devuelve.
+ *
+ * Todo lo que la restriccion `orientation_report_ready_is_complete` de la
+ * migracion 006 exige va aqui como obligatorio. Asi un cierre incompleto se
+ * rechaza en el borde, con un 400 que dice que campo falta, en vez de morir
+ * contra la restriccion a las tres de la mañana con un error de Postgres.
+ */
+export const CompleteReportInputSchema = z.object({
+  bucket: z.string().min(1),
+  objects: ReportObjectsSchema,
+  schemaVersion: z.string().min(1),
+  riasecCode: z.string().regex(/^[RIASEC]{3}$/),
+  datasetSource: z.string().min(1),
+  datasetSnapshotDate: z.iso.date(),
+  topCareers: z.array(z.string()),
+  profileCompleteness: z.number().min(0).max(1).nullish(),
+  modelId: z.string().nullish(),
+  langsmithRunId: z.uuid().nullish(),
+  generationMs: z.number().int().nonnegative().nullish(),
+});
+export const CompleteReportOutputSchema = ReportSchema;
+export type CompleteReportBody = z.infer<typeof CompleteReportInputSchema>;
+
+/**
+ * `POST /v1/reports/{reportId}/fail`.
+ *
+ * El motivo se acota a 500 caracteres porque acaba en una columna de la fila y
+ * de ahi, algun dia, en una pantalla. Un traceback entero de Python no le dice
+ * nada a un estudiante de secundaria y si le regala a cualquiera que mire la
+ * respuesta el mapa de nuestros modulos.
+ */
+export const FailReportInputSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+export const FailReportOutputSchema = ReportSchema;
+export type FailReportBody = z.infer<typeof FailReportInputSchema>;
 
 export const GetReportInputSchema = z.object({});
 export const GetReportOutputSchema = ReportSchema;

@@ -182,6 +182,16 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/spark-match-reports-get-report-pdf-${Environment}'
       RetentionInDays: !Ref LogRetentionInDays
+  ReportsCompleteReportLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-complete-report-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  ReportsFailReportLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-fail-report-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
 
   # ===========================================================================
   # Functions
@@ -371,6 +381,84 @@ Resources:
           SecurityGroupIds: !Ref VpcSecurityGroupIds
         - !Ref AWS::NoValue
 
+  # Las dos puertas de cierre. Escriben una fila y nada mas, asi que se quedan
+  # con los valores por defecto de memoria y tiempo como las tres primeras.
+  #
+  # Y NO llevan `RouteSettings`: el estrangulador esta en `POST /v1/reports`, a
+  # la entrada, que es donde se decide cuanto trabajo se admite. Poner otro
+  # aqui frenaria el cierre de un trabajo que ya se pago entero -- el modelo ya
+  # respondio, el PDF ya esta en el bucket -- y el unico efecto seria dejar la
+  # fila en `pending` hasta que el barrido la matara.
+  ReportsCompleteReportFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - complete-report.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-complete-report-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: complete-report.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Close a report as ready (POST /v1/reports/{reportId}/complete)
+      Events:
+        CompleteReportApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}/complete
+            Method: POST
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  ReportsFailReportFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - fail-report.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-fail-report-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: fail-report.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Close a report as failed (POST /v1/reports/{reportId}/fail)
+      Events:
+        FailReportApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}/fail
+            Method: POST
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
 Outputs:
   ReportsCreateReportFunctionArn:
     Value: !GetAtt ReportsCreateReportFunction.Arn
@@ -382,6 +470,10 @@ Outputs:
     Value: !GetAtt ReportsGetReportContentFunction.Arn
   ReportsGetReportPdfFunctionArn:
     Value: !GetAtt ReportsGetReportPdfFunction.Arn
+  ReportsCompleteReportFunctionArn:
+    Value: !GetAtt ReportsCompleteReportFunction.Arn
+  ReportsFailReportFunctionArn:
+    Value: !GetAtt ReportsFailReportFunction.Arn
 
   ReportsHttpApiUrl:
     Description: Reports HTTP API Gateway endpoint URL

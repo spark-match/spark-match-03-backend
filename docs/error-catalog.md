@@ -144,7 +144,23 @@ Algunos handlers lanzan 400 con detail codes hand-rolled:
 | `validation.invalid_active` | `400` | `list-users` | `active` query param no es `true`/`false`/`all` |
 | `validation.invalid_role` | `400` | `list-users` | `role` query param no est en `USER_ROLES` |
 
-### 3.6 `internal.*` — errores no esperados
+### 3.6 `report.*` — ciclo de vida del informe de orientación
+
+Los seis viven en el contexto `reports` y todos son estados por los que se
+pasa, no averías: el agente los recibe dentro de un turno de chat y su trabajo
+es convertirlos en una frase para el estudiante. Por eso llevan código propio
+en vez de compartir uno genérico — la acción que toca es distinta en cada uno.
+
+| Detail code | HTTP | Cuándo | Qué hace el agente |
+|---|---|---|---|
+| `report.riasec_missing` | `409` | El perfil no tiene código Holland. Puerta dura de [ADR-019](adr/019-orientation-report.md) D8 | Llevarlo al assessment |
+| `report.profile_incomplete` | `409` | `profileCompleteness` por debajo del umbral de SSM. Puerta blanda de D8. `meta` trae el valor y el mínimo | Preguntarle dos cosas más |
+| `report.daily_limit_reached` | `429` | Tope de D9 en las últimas 24 h. `meta` trae `limit`, `used` y `retryAfter` | Decirle a qué hora puede volver a pedirlo |
+| `report.already_generating` | `409` | Ya hay uno en curso. Lo levanta el índice parcial de la migración 006, no una lectura previa | Esperar y sondear el que hay |
+| `report.already_closed` | `409` | Se intenta cerrar uno que ya no está `pending`. Los objetos del que llega tarde quedan huérfanos en el bucket | Registrarlo; no reintentar |
+| `report.not_ready` | `409` | Se pide el contenido de uno que no está `ready`. `meta.status` distingue `pending` de `failed` | Seguir sondeando, o rendirse si es `failed` |
+
+### 3.7 `internal.*` — errores no esperados
 
 | Detail code | HTTP | Cuando |
 |---|---|---|
@@ -178,8 +194,13 @@ Reservados para uso futuro; no se emiten en respuestas hoy:
 | Cdigo | HTTP | Planeado para |
 |---|---|---|
 | `unprocessable_entity` | 422 | Validaciones de negocio ms all de Zod (ej. reglas cross-field) |
-| `too_many_requests` | 429 | Rate limiting (futuro). Ver [ADR-018](adr/018-throttling-strategy.md). Edge throttling (API Gateway) o Per-IP WAF. |
 | `locked` | 423 | Account lockout (Per-account, último mecanismo del throttling strategy). Ver [ADR-018](adr/018-throttling-strategy.md). |
+
+`too_many_requests` (429) estaba en esta lista y **ya no**: lo emite el tope
+diario de informes (`report.daily_limit_reached`, ver 3.6). Sigue sin haber
+rate limiting por IP ni por cuenta — [ADR-018](adr/018-throttling-strategy.md)
+describe eso y no ha cambiado; lo que hay es un límite de negocio que se
+expresa con el mismo status.
 
 ---
 
