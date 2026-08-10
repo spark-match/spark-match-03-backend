@@ -68,6 +68,40 @@ export interface HandlerConfig<TInput, TOutput> {
   successStatusCode?: number;
 }
 
+/**
+ * Lo que devuelve un handler que contesta con BYTES en vez de con el sobre
+ * JSON de `formatResponse`.
+ *
+ * Existe para los dos endpoints que sirven un informe ya generado. Ahi el
+ * sobre estorba por dos motivos: un PDF no cabe en un campo JSON, y el JSON
+ * del informe se sirve TAL CUAL sale de S3 a proposito -- el `checksumSha256`
+ * que guarda la fila describe esos bytes exactos, y reempaquetarlos haria que
+ * el checksum dejara de servir para comprobar lo que el cliente recibio.
+ *
+ * El resto del pipeline sigue puesto: auth, CORS, trazas y el manejo de
+ * errores. Lo unico que cambia es la forma de la respuesta con exito.
+ */
+export interface RawPayload {
+  readonly kind: 'raw';
+  contentType: string;
+  body: Buffer;
+  /** Si se indica, se manda `Content-Disposition: attachment`. */
+  fileName?: string;
+}
+
+export function rawPayload(body: Buffer, contentType: string, fileName?: string): RawPayload {
+  return { kind: 'raw', body, contentType, fileName };
+}
+
+function esRawPayload(value: unknown): value is RawPayload {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { kind?: unknown }).kind === 'raw' &&
+    Buffer.isBuffer((value as { body?: unknown }).body)
+  );
+}
+
 interface ResponseLike {
   statusCode: number;
   headers: Record<string, string>;
@@ -223,6 +257,21 @@ export function buildHandler<TInput, TOutput>(
       const input = validatePayload(config.inputSchema, rawBody) as TInput;
       const auth = config.requireAuth ? await requireAuth(event, config.logger) : undefined;
       const result = await config.handler(input, event, auth);
+      if (esRawPayload(result)) {
+        // `isBase64Encoded` no es opcional aunque el cuerpo sea texto: API
+        // Gateway decide por esta bandera si decodifica antes de responder, y
+        // mandar base64 sin ella entrega base64 al cliente.
+        const headers: Record<string, string> = { 'Content-Type': result.contentType };
+        if (result.fileName !== undefined) {
+          headers['Content-Disposition'] = `attachment; filename="${result.fileName}"`;
+        }
+        return {
+          statusCode: config.successStatusCode ?? 200,
+          body: result.body.toString('base64'),
+          isBase64Encoded: true,
+          headers,
+        };
+      }
       return {
         statusCode: config.successStatusCode ?? 200,
         body: JSON.stringify(formatResponse(result, requestId)),

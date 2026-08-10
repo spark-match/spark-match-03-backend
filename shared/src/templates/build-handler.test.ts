@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
-import { buildHandler, parseCorsAllowedOrigins, selectAllowOrigin } from './build-handler.js';
+import {
+  buildHandler,
+  parseCorsAllowedOrigins,
+  rawPayload,
+  selectAllowOrigin,
+} from './build-handler.js';
 import { z } from 'zod';
 
 const inputSchema = z.object({ name: z.string() });
@@ -315,5 +320,72 @@ describe('inline CORS middleware with CORS_ALLOWED_ORIGINS env', () => {
     )(ev)) as { headers: Record<string, string> };
     expect(result.headers['Access-Control-Allow-Origin']).toBe('https://app.example.com');
     expect(result.headers['Vary']).toBe('Origin');
+  });
+});
+
+describe('respuesta en bytes (rawPayload)', () => {
+  const PDF = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x00, 0xff]);
+
+  type RespuestaCruda = {
+    statusCode: number;
+    body: string;
+    isBase64Encoded?: boolean;
+    headers?: Record<string, string>;
+  };
+
+  function handlerDeBytes(fileName?: string) {
+    return buildHandler({
+      inputSchema: z.object({}),
+      logger,
+      tracer,
+      handler: async () => rawPayload(PDF, 'application/pdf', fileName),
+    });
+  }
+
+  it('marca isBase64Encoded y devuelve los bytes intactos', async () => {
+    // Sin la bandera, API Gateway entrega el base64 sin decodificar. Y el
+    // cuerpo lleva bytes que no son texto valido a proposito: si algo por el
+    // camino lo tratara como string, se corromperian.
+    const respuesta = (await handlerDeBytes()(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.isBase64Encoded).toBe(true);
+    expect(Buffer.from(respuesta.body, 'base64').equals(PDF)).toBe(true);
+  });
+
+  it('el Content-Type del fichero gana al de CORS', async () => {
+    // El middleware de CORS mete `application/json` con `??=`. Si dejara de
+    // serlo, un PDF se serviria como JSON.
+    const respuesta = (await handlerDeBytes()(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.headers?.['Content-Type']).toBe('application/pdf');
+  });
+
+  it('sin fileName no manda Content-Disposition', async () => {
+    const respuesta = (await handlerDeBytes()(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.headers?.['Content-Disposition']).toBeUndefined();
+  });
+
+  it('con fileName lo manda como descarga', async () => {
+    const respuesta = (await handlerDeBytes('informe.pdf')(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.headers?.['Content-Disposition']).toBe('attachment; filename="informe.pdf"');
+  });
+
+  it('un objeto normal sigue saliendo en el sobre JSON', async () => {
+    // La deteccion mira `kind === 'raw'` Y que el cuerpo sea un Buffer. Un
+    // payload de negocio que por casualidad tuviera `kind: 'raw'` no debe
+    // colarse por esta rama.
+    const h = buildHandler({
+      inputSchema: z.object({}),
+      logger,
+      tracer,
+      handler: async () => ({ kind: 'raw', body: 'no soy un Buffer' }),
+    });
+
+    const respuesta = (await h(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.isBase64Encoded).toBeUndefined();
+    expect(JSON.parse(respuesta.body).success).toBe(true);
   });
 });
