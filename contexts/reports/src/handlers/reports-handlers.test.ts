@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockRequest, mockGet, mockList, mockBuildContext } = vi.hoisted(() => ({
+const { mockRequest, mockGet, mockList, mockGetContent, mockBuildContext } = vi.hoisted(() => ({
   mockRequest: vi.fn(),
   mockGet: vi.fn(),
   mockList: vi.fn(),
+  mockGetContent: vi.fn(),
   mockBuildContext: vi.fn(),
 }));
 
@@ -25,6 +26,8 @@ import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { handler as createReport } from './create-report.js';
 import { handler as getReport } from './get-report.js';
 import { handler as listReports } from './list-reports.js';
+import { handler as getReportContent } from './get-report-content.js';
+import { handler as getReportPdf } from './get-report-pdf.js';
 
 const USUARIO = '11111111-1111-4111-8111-111111111111';
 const INFORME = '22222222-2222-4222-8222-222222222222';
@@ -81,14 +84,24 @@ function makeEvent(overrides: Record<string, unknown> = {}, autenticado = true) 
   } as unknown as APIGatewayProxyEventV2;
 }
 
-type Respuesta = { statusCode: number; body: string };
+type Respuesta = {
+  statusCode: number;
+  body: string;
+  isBase64Encoded?: boolean;
+  headers?: Record<string, string>;
+};
 const invocar = (h: unknown, ev: APIGatewayProxyEventV2): Promise<Respuesta> =>
   (h as (e: APIGatewayProxyEventV2) => Promise<Respuesta>)(ev);
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockBuildContext.mockResolvedValue({
-    reportService: { request: mockRequest, get: mockGet, list: mockList },
+    reportService: {
+      request: mockRequest,
+      get: mockGet,
+      list: mockList,
+      getContent: mockGetContent,
+    },
   });
 });
 
@@ -196,5 +209,123 @@ describe('GET /v1/reports', () => {
 
   it('sin token, 401', async () => {
     expect((await invocar(listReports, makeEvent({}, false))).statusCode).toBe(401);
+  });
+});
+
+describe('GET /v1/reports/{reportId}/content y /pdf', () => {
+  const PDF = Buffer.from('%PDF-1.7\nno es un pdf de verdad, pero son bytes\n');
+  const JSON_BYTES = Buffer.from('{"schema_version":"1","riasec_code":"SIA"}', 'utf-8');
+
+  function eventoDeContenido(sufijo: string) {
+    return makeEvent({
+      routeKey: `GET /v1/reports/{reportId}/${sufijo}`,
+      rawPath: `/v1/reports/${INFORME}/${sufijo}`,
+      pathParameters: { reportId: INFORME },
+    });
+  }
+
+  it('devuelve los bytes en base64 y marcados como tales', async () => {
+    // Sin `isBase64Encoded`, API Gateway entrega el base64 al cliente en vez
+    // de decodificarlo: el navegador se descarga un fichero de texto que
+    // empieza por JVBERi0.
+    mockGetContent.mockResolvedValue({
+      bytes: PDF,
+      contentType: 'application/pdf',
+      fileName: `informe-orientacion-${INFORME}.pdf`,
+    });
+
+    const respuesta = await invocar(getReportPdf, eventoDeContenido('pdf'));
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(respuesta.isBase64Encoded).toBe(true);
+    expect(Buffer.from(respuesta.body, 'base64').equals(PDF)).toBe(true);
+  });
+
+  it('el PDF sale como descarga y con un nombre sin datos del estudiante', async () => {
+    mockGetContent.mockResolvedValue({
+      bytes: PDF,
+      contentType: 'application/pdf',
+      fileName: `informe-orientacion-${INFORME}.pdf`,
+    });
+
+    const respuesta = await invocar(getReportPdf, eventoDeContenido('pdf'));
+
+    expect(respuesta.headers?.['Content-Type']).toBe('application/pdf');
+    expect(respuesta.headers?.['Content-Disposition']).toBe(
+      `attachment; filename="informe-orientacion-${INFORME}.pdf"`,
+    );
+    expect(respuesta.headers?.['Content-Disposition']).not.toContain(USUARIO);
+  });
+
+  it('el CORS no pisa el Content-Type del fichero', async () => {
+    // El middleware de CORS mete `Content-Type: application/json` con `??=`.
+    // Si algun dia deja de ser `??=`, un PDF se serviria como JSON y el
+    // navegador lo enseñaria como texto.
+    mockGetContent.mockResolvedValue({
+      bytes: PDF,
+      contentType: 'application/pdf',
+      fileName: 'x.pdf',
+    });
+
+    const respuesta = await invocar(getReportPdf, eventoDeContenido('pdf'));
+
+    expect(respuesta.headers?.['Content-Type']).not.toBe('application/json');
+  });
+
+  it('el JSON se sirve tal cual, sin el sobre de la API', async () => {
+    // Envolverlo en `{success, data, meta}` haria que el `checksumSha256` de
+    // la fila dejara de describir lo que el cliente recibe.
+    mockGetContent.mockResolvedValue({
+      bytes: JSON_BYTES,
+      contentType: 'application/json',
+      fileName: `informe-orientacion-${INFORME}.json`,
+    });
+
+    const respuesta = await invocar(getReportContent, eventoDeContenido('content'));
+
+    const cuerpo = Buffer.from(respuesta.body, 'base64').toString('utf-8');
+    expect(JSON.parse(cuerpo)).toEqual({ schema_version: '1', riasec_code: 'SIA' });
+    expect(cuerpo).not.toContain('"success"');
+  });
+
+  it('cada endpoint pide SU objeto', async () => {
+    mockGetContent.mockResolvedValue({ bytes: PDF, contentType: 'application/pdf', fileName: 'x' });
+    await invocar(getReportPdf, eventoDeContenido('pdf'));
+    expect(mockGetContent).toHaveBeenCalledWith({
+      actorUserId: USUARIO,
+      reportId: INFORME,
+      kind: 'pdf',
+    });
+
+    mockGetContent.mockResolvedValue({
+      bytes: JSON_BYTES,
+      contentType: 'application/json',
+      fileName: 'x',
+    });
+    await invocar(getReportContent, eventoDeContenido('content'));
+    expect(mockGetContent).toHaveBeenLastCalledWith({
+      actorUserId: USUARIO,
+      reportId: INFORME,
+      kind: 'json',
+    });
+  });
+
+  it('sin reportId en la ruta, 400', async () => {
+    const ev = makeEvent({ routeKey: 'GET /v1/reports/{reportId}/pdf' });
+
+    expect((await invocar(getReportPdf, ev)).statusCode).toBe(400);
+  });
+
+  it('sin token, 401', async () => {
+    const ev = makeEvent({ pathParameters: { reportId: INFORME } }, false);
+
+    expect((await invocar(getReportContent, ev)).statusCode).toBe(401);
+  });
+
+  it('el error del servicio llega con su codigo, no como 500', async () => {
+    const { ApiError } = await import('@spark-match/shared/http');
+    mockGetContent.mockRejectedValue(ApiError.conflict('The report is not ready yet'));
+
+    expect((await invocar(getReportPdf, eventoDeContenido('pdf'))).statusCode).toBe(409);
   });
 });
