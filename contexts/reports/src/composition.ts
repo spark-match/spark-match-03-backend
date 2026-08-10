@@ -1,0 +1,51 @@
+// =============================================================================
+// Reports composition root
+// =============================================================================
+// Lazy singleton shared by every handler in the reports context, same shape as
+// contexts/identity/src/composition.ts.
+//
+// Smaller than identity's on purpose: no EventBridge publisher and no JWT
+// signer. This context does not emit events yet and does not mint tokens -- it
+// only verifies the ones identity mints, which `buildHandler` already does.
+// =============================================================================
+
+import { Tracer } from '@aws-lambda-powertools/tracer';
+import { createLogger } from '@spark-match/shared/logger';
+import type { Kysely } from 'kysely';
+import { getDbConnection } from './infra/db-connection.js';
+import {
+  createOrientationReportRepository,
+  type Database,
+  type OrientationReportRepository,
+} from './infra/orientation-report-repository.js';
+import { createReportService, type ReportService } from './service/report-service.js';
+
+export interface ReportsContext {
+  logger: ReturnType<typeof createLogger>;
+  tracer: Tracer;
+  db: Kysely<Database>;
+  reportRepository: OrientationReportRepository;
+  reportService: ReportService;
+}
+
+let context: ReportsContext | null = null;
+let pendingPromise: Promise<ReportsContext> | null = null;
+
+export async function buildContext(): Promise<ReportsContext> {
+  if (context) return context;
+  if (pendingPromise) return pendingPromise;
+
+  pendingPromise = (async () => {
+    const logger = createLogger('reports');
+    const tracer = new Tracer({ serviceName: 'reports' });
+
+    const db = await getDbConnection();
+    const reportRepository = createOrientationReportRepository(db);
+    const reportService = createReportService({ reportRepository, logger });
+
+    const built: ReportsContext = { logger, tracer, db, reportRepository, reportService };
+    context = built;
+    return built;
+  })();
+  return pendingPromise;
+}

@@ -1,28 +1,24 @@
 // =============================================================================
-// DB connection (kysely) for the identity context
+// DB connection (kysely) for the reports context
 // =============================================================================
-// What lives here is the `Kysely<Database>` typed against THIS context's
-// schema. Opening the pool -- resolving the ARN from SSM, decrypting the
-// credentials, configuring TLS and sizing -- moved to
-// `@spark-match/shared/infra` when the reports context needed the same 35
-// lines. See shared/src/infra/db-pool.ts for why they are not here.
+// Lo unico que vive aqui es el `Kysely<Database>` tipado contra el schema de
+// ESTE contexto. Abrir el pool -- resolver el ARN por SSM, descifrar las
+// credenciales, configurar TLS y el tamaño -- es infraestructura compartida y
+// vive en `@spark-match/shared/infra`.
 //
-// The pool is cached per Lambda container so cold starts pay the connection
-// cost only once.
+// El pool se cachea por contenedor de Lambda: el coste de SSM y Secrets
+// Manager se paga en el arranque en frio y no en cada peticion.
 // =============================================================================
 
 import { Kysely, PostgresDialect } from 'kysely';
 import type { Pool } from 'pg';
 import { createDbPool } from '@spark-match/shared/infra';
-import type { Database } from './user-repository.js';
+import type { Database } from './database.js';
 
 let cachedPool: Pool | null = null;
 let cachedDb: Kysely<Database> | null = null;
 
-export async function getDbConnection(options?: {
-  secretArn?: string;
-  defaultSchema?: string;
-}): Promise<Kysely<Database>> {
+export async function getDbConnection(options?: { secretArn?: string }): Promise<Kysely<Database>> {
   if (cachedDb) return cachedDb;
 
   cachedPool = await createDbPool(options);
