@@ -35,7 +35,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@aws-sdk/client-ssm": "^3.1101.0",
+    "@aws-sdk/client-ssm": "^3.1106.0",
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^26.1.2",
     "@types/pg": "^8.20.3",
@@ -62,8 +62,8 @@
     "@aws-lambda-powertools/metrics": "^2.10.0",
     "@aws-lambda-powertools/parameters": "^2.10.0",
     "@aws-lambda-powertools/tracer": "^2.10.0",
-    "@aws-sdk/client-eventbridge": "^3.1101.0",
-    "@aws-sdk/client-secrets-manager": "^3.1101.0",
+    "@aws-sdk/client-eventbridge": "^3.1106.0",
+    "@aws-sdk/client-secrets-manager": "^3.1106.0",
     "@middy/core": "^7.7.0",
     "@middy/do-not-wait-for-empty-event-loop": "^7.7.0",
     "@middy/http-cors": "^7.7.0",
