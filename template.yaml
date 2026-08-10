@@ -77,6 +77,35 @@ Resources:
           Value: !Ref Environment
 
   # ===========================================================================
+  # Nested stack: Reports Context
+  # ===========================================================================
+  # Trae su propia HttpApi en vez de colgarse de la de identity. El motivo
+  # completo esta en el encabezado de contexts/reports/template.yaml; en corto:
+  # la API de identity es un import de OpenAPI, y una ruta anadida desde otro
+  # stack no sobrevive al siguiente deploy.
+  #
+  # No lleva `DependsOn`: el !GetAtt al output de IdentityStack ya crea la
+  # dependencia, y anadirlo ademas seria repetir lo que CloudFormation deduce.
+  ReportsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./contexts/reports/template.yaml
+      Parameters:
+        Environment: !Ref Environment
+        LogRetentionInDays: !Ref LogRetentionInDays
+        VpcSubnetIds: !Join [',', !Ref VpcSubnetIds]
+        VpcSecurityGroupIds: !Join [',', !Ref VpcSecurityGroupIds]
+        CorsAllowedOrigins: !Join [',', !Ref CorsAllowedOrigins]
+        IdentityAuthorizerFunctionArn: !GetAtt IdentityStack.Outputs.IdentityAuthorizerFunctionArn
+      Tags:
+        - Key: Project
+          Value: spark-match
+        - Key: Component
+          Value: reports
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ===========================================================================
   # CloudWatch Log Group (root)
   # ===========================================================================
   ApplicationLogGroup:
@@ -106,6 +135,23 @@ Outputs:
     Value: !GetAtt IdentityStack.Outputs.HttpApiId
     Export:
       Name: !Sub 'spark-match-${Environment}-HttpApiId'
+
+  # La segunda URL base. El frontend necesita las dos: identity para todo lo de
+  # sesion y perfil, esta para los informes.
+  #
+  # SIN `Export:`, por el mismo motivo que IdentityMigrateFunctionArn mas abajo,
+  # y no por descuido: hoy NADIE hace ImportValue de los cuatro exports de este
+  # stack -- se comprobo en los tres repos que despliegan. El smoke test de
+  # deploy.yml lee estos dos con `describe-stacks`, que no necesita Export.
+  # Anadirlo por simetria con HttpApiUrl seria crear un nombre global que
+  # ademas congela el valor en cuanto alguien lo importe.
+  ReportsHttpApiUrl:
+    Description: Reports HTTP API Gateway endpoint URL
+    Value: !GetAtt ReportsStack.Outputs.ReportsHttpApiUrl
+
+  ReportsHttpApiId:
+    Description: Reports HTTP API Gateway ID
+    Value: !GetAtt ReportsStack.Outputs.ReportsHttpApiId
 
   IdentityStackVpcSubnetIds:
     Description: Comma-separated VPC subnet IDs forwarded to the identity nested stack (empty for non-VPC dev runs)
