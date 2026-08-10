@@ -109,6 +109,36 @@ jobs:
       npm-script: 'migrate:up'
       timeout-minutes: 10
 
+  # constraints-check: lo mismo que migrations-dry-run pero, ademas de aplicar
+  # las migraciones, INSERTA contra el postgres:17 efimero. Comprueba que las
+  # restricciones hacen lo que la migracion dice: que el indice unico parcial
+  # rechaza un segundo informe en curso, que un `ready` incompleto no entra, y
+  # que el driver devuelve NUMERIC como string y DATE en hora local -- las dos
+  # coacciones que el repositorio compensa.
+  #
+  # Existe porque `migrations-dry-run` solo aplica DDL. Un CHECK mal escrito se
+  # crea sin protestar y no se descubre hasta que alguien mete la fila que
+  # deberia haber rechazado, en produccion y semanas despues.
+  #
+  # Mismo reusable, otro npm-script: `test:db` corre `migrate:up` y luego los
+  # `*.itest.ts`, que no entran en `npm test` porque no casan con el patron
+  # `*.test.ts` del config de unidad.
+  constraints-check:
+    uses: spark-match/spark-match-01-devops/.github/workflows/reusable-migrations-dry-run.yml@main
+    with:
+      environment-name: 'constraints'
+      postgres-version: '17'
+      postgres-user: 'postgres'
+      postgres-password: 'postgres'
+      postgres-db: 'spark_match_test'
+      migrations-dir: 'migrations'
+      migrations-table: 'spark_match_migrations'
+      migrations-schema: 'public'
+      node-version: '24'
+      working-directory: '.'
+      npm-script: 'test:db'
+      timeout-minutes: 10
+
   # sam-validate: expande el transform AWS::Serverless-2016-10-31 y corre
   # cfn-lint sobre el resultado, que es exactamente lo que hace CloudFormation
   # al crear el changeset. Sin este gate, un template invalido solo se descubre
