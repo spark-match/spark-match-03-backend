@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockRequest, mockGet, mockList, mockGetContent, mockBuildContext } = vi.hoisted(() => ({
-  mockRequest: vi.fn(),
-  mockGet: vi.fn(),
-  mockList: vi.fn(),
-  mockGetContent: vi.fn(),
-  mockBuildContext: vi.fn(),
-}));
+const { mockRequest, mockGet, mockList, mockGetContent, mockComplete, mockFail, mockBuildContext } =
+  vi.hoisted(() => ({
+    mockRequest: vi.fn(),
+    mockGet: vi.fn(),
+    mockList: vi.fn(),
+    mockGetContent: vi.fn(),
+    mockComplete: vi.fn(),
+    mockFail: vi.fn(),
+    mockBuildContext: vi.fn(),
+  }));
 
 vi.mock('../composition.js', () => ({ buildContext: mockBuildContext }));
 
@@ -28,9 +31,38 @@ import { handler as getReport } from './get-report.js';
 import { handler as listReports } from './list-reports.js';
 import { handler as getReportContent } from './get-report-content.js';
 import { handler as getReportPdf } from './get-report-pdf.js';
+import { handler as completeReport } from './complete-report.js';
+import { handler as failReport } from './fail-report.js';
 
 const USUARIO = '11111111-1111-4111-8111-111111111111';
 const INFORME = '22222222-2222-4222-8222-222222222222';
+
+/** El cuerpo que la puerta de D8 espera en `POST /v1/reports`. */
+const PERFIL = { profileCompleteness: 0.8, riasecCode: 'SIA' };
+
+/** Lo que el generador devuelve al cerrar bien. */
+const RESULTADO = {
+  bucket: 'spark-match-reports-dev',
+  objects: {
+    json: {
+      key: `reports/${USUARIO}/${INFORME}.json`,
+      versionId: 'v1',
+      sizeBytes: 10,
+      checksumSha256: 'aaa',
+    },
+    pdf: {
+      key: `reports/${USUARIO}/${INFORME}.pdf`,
+      versionId: 'v2',
+      sizeBytes: 20,
+      checksumSha256: 'bbb',
+    },
+  },
+  schemaVersion: '1',
+  riasecCode: 'SIA',
+  datasetSource: 'Ponte en Carrera (MINEDU)',
+  datasetSnapshotDate: '2026-06-13',
+  topCareers: ['Psicologia'],
+};
 
 const FILA = {
   id: INFORME,
@@ -101,17 +133,21 @@ beforeEach(() => {
       get: mockGet,
       list: mockList,
       getContent: mockGetContent,
+      complete: mockComplete,
+      fail: mockFail,
     },
   });
 });
 
 describe('POST /v1/reports', () => {
+  const abrir = (cuerpo: unknown = PERFIL) => makeEvent({ body: JSON.stringify(cuerpo) });
+
   it('responde 202 y no 200', async () => {
     // El informe se ha ACEPTADO, no completado. Un 200 diria que ya esta
     // listo y contradiria al sondeo que la propia respuesta arranca.
     mockRequest.mockResolvedValue(FILA);
 
-    const respuesta = await invocar(createReport, makeEvent());
+    const respuesta = await invocar(createReport, abrir());
 
     expect(respuesta.statusCode).toBe(202);
     expect(JSON.parse(respuesta.body).data.status).toBe('pending');
@@ -120,13 +156,60 @@ describe('POST /v1/reports', () => {
   it('el dueño sale del token, nunca del cuerpo', async () => {
     mockRequest.mockResolvedValue(FILA);
 
-    await invocar(createReport, makeEvent({ body: JSON.stringify({ userId: 'otro' }) }));
+    await invocar(createReport, abrir({ ...PERFIL, userId: 'otro' }));
 
-    expect(mockRequest).toHaveBeenCalledWith({ userId: USUARIO });
+    expect(mockRequest).toHaveBeenCalledWith({ userId: USUARIO, ...PERFIL });
+  });
+
+  it('pasa al servicio lo que el agente dice del perfil', async () => {
+    // El backend no puede averiguarlo: el perfil vive en el store del agente.
+    mockRequest.mockResolvedValue(FILA);
+
+    await invocar(createReport, abrir({ profileCompleteness: 0.42, riasecCode: 'RIA' }));
+
+    expect(mockRequest).toHaveBeenCalledWith({
+      userId: USUARIO,
+      profileCompleteness: 0.42,
+      riasecCode: 'RIA',
+    });
+  });
+
+  it('un RIASEC ausente llega al servicio como null, no como 400', async () => {
+    // Que falte no es una peticion mal construida, es el caso normal de quien
+    // no ha terminado el assessment. Tiene que salir como el 409 con codigo
+    // que el agente convierte en una pregunta.
+    mockRequest.mockResolvedValue(FILA);
+
+    await invocar(createReport, abrir({ profileCompleteness: 0.3, riasecCode: null }));
+
+    expect(mockRequest).toHaveBeenCalledWith({
+      userId: USUARIO,
+      profileCompleteness: 0.3,
+      riasecCode: null,
+    });
+  });
+
+  it('sin cuerpo, 400', async () => {
+    expect((await invocar(createReport, makeEvent())).statusCode).toBe(400);
+  });
+
+  it('una completitud fuera de 0..1 es 400', async () => {
+    const ev = abrir({ profileCompleteness: 42, riasecCode: 'SIA' });
+
+    expect((await invocar(createReport, ev)).statusCode).toBe(400);
+  });
+
+  it('un codigo que no son tres letras Holland es 400', async () => {
+    // 'XYZ' no existe como codigo; dejarlo pasar seria buscar afinidad contra
+    // un codigo que el motor no sabe puntuar.
+    const ev = abrir({ profileCompleteness: 0.8, riasecCode: 'XYZ' });
+
+    expect((await invocar(createReport, ev)).statusCode).toBe(400);
   });
 
   it('sin token, 401', async () => {
-    expect((await invocar(createReport, makeEvent({}, false))).statusCode).toBe(401);
+    const ev = makeEvent({ body: JSON.stringify(PERFIL) }, false);
+    expect((await invocar(createReport, ev)).statusCode).toBe(401);
   });
 
   it('deja subir el 409 del repositorio tal cual', async () => {
@@ -135,7 +218,157 @@ describe('POST /v1/reports', () => {
     const { ApiError } = await import('@spark-match/shared/http');
     mockRequest.mockRejectedValue(ApiError.conflict('A report is already being generated'));
 
-    expect((await invocar(createReport, makeEvent())).statusCode).toBe(409);
+    expect((await invocar(createReport, abrir())).statusCode).toBe(409);
+  });
+
+  it('deja subir el 429 del tope diario', async () => {
+    const { ApiError } = await import('@spark-match/shared/http');
+    mockRequest.mockRejectedValue(ApiError.tooManyRequests('Daily report limit reached'));
+
+    expect((await invocar(createReport, abrir())).statusCode).toBe(429);
+  });
+});
+
+describe('POST /v1/reports/{reportId}/complete', () => {
+  const cerrar = (cuerpo: unknown = RESULTADO) =>
+    makeEvent({
+      routeKey: 'POST /v1/reports/{reportId}/complete',
+      pathParameters: { reportId: INFORME },
+      body: JSON.stringify(cuerpo),
+    });
+
+  it('cierra el informe y responde 200, no 202', async () => {
+    // A diferencia de abrirlo, esto si termino. El 202 aqui arrancaria un
+    // sondeo sobre algo que ya no se mueve.
+    mockComplete.mockResolvedValue({ ...FILA, status: 'ready' as const });
+
+    const respuesta = await invocar(completeReport, cerrar());
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(JSON.parse(respuesta.body).data.status).toBe('ready');
+  });
+
+  it('el id sale de la ruta y el dueño del token', async () => {
+    mockComplete.mockResolvedValue({ ...FILA, status: 'ready' as const });
+
+    await invocar(completeReport, cerrar());
+
+    expect(mockComplete).toHaveBeenCalledWith({
+      actorUserId: USUARIO,
+      reportId: INFORME,
+      result: expect.objectContaining({ bucket: 'spark-match-reports-dev' }),
+    });
+  });
+
+  it('los opcionales ausentes viajan como null, no como undefined', async () => {
+    // Sin el `?? null`, un reintento que no traiga `generation_ms` dejaria en
+    // la fila el de la generacion anterior en vez de borrarlo.
+    mockComplete.mockResolvedValue({ ...FILA, status: 'ready' as const });
+
+    await invocar(completeReport, cerrar());
+
+    expect(mockComplete.mock.calls[0][0].result).toMatchObject({
+      profileCompleteness: null,
+      modelId: null,
+      langsmithRunId: null,
+      generationMs: null,
+    });
+  });
+
+  it('un cierre al que le falta un campo obligatorio es 400', async () => {
+    // Mejor aqui, diciendo que campo falta, que contra la restriccion
+    // `orientation_report_ready_is_complete` a las tres de la mañana.
+    const { objects: _objects, ...sinObjetos } = RESULTADO;
+
+    expect((await invocar(completeReport, cerrar(sinObjetos))).statusCode).toBe(400);
+    expect(mockComplete).not.toHaveBeenCalled();
+  });
+
+  it('sin reportId en la ruta, 400', async () => {
+    const ev = makeEvent({
+      routeKey: 'POST /v1/reports/{reportId}/complete',
+      body: JSON.stringify(RESULTADO),
+    });
+
+    expect((await invocar(completeReport, ev)).statusCode).toBe(400);
+  });
+
+  it('sin token, 401', async () => {
+    const ev = makeEvent(
+      { pathParameters: { reportId: INFORME }, body: JSON.stringify(RESULTADO) },
+      false,
+    );
+
+    expect((await invocar(completeReport, ev)).statusCode).toBe(401);
+  });
+
+  it('cerrar uno que ya estaba cerrado sube como 409', async () => {
+    const { ApiError } = await import('@spark-match/shared/http');
+    mockComplete.mockRejectedValue(ApiError.conflict('The report is already closed'));
+
+    expect((await invocar(completeReport, cerrar())).statusCode).toBe(409);
+  });
+
+  it('el informe de otro es 404', async () => {
+    const { ApiError } = await import('@spark-match/shared/http');
+    mockComplete.mockRejectedValue(ApiError.notFound('Report'));
+
+    expect((await invocar(completeReport, cerrar())).statusCode).toBe(404);
+  });
+});
+
+describe('POST /v1/reports/{reportId}/fail', () => {
+  const fallar = (cuerpo: unknown = { reason: 'WeasyPrint no esta disponible' }) =>
+    makeEvent({
+      routeKey: 'POST /v1/reports/{reportId}/fail',
+      pathParameters: { reportId: INFORME },
+      body: JSON.stringify(cuerpo),
+    });
+
+  it('marca el informe como fallido con su motivo', async () => {
+    mockFail.mockResolvedValue({ ...FILA, status: 'failed' as const });
+
+    const respuesta = await invocar(failReport, fallar());
+
+    expect(respuesta.statusCode).toBe(200);
+    expect(mockFail).toHaveBeenCalledWith({
+      actorUserId: USUARIO,
+      reportId: INFORME,
+      reason: 'WeasyPrint no esta disponible',
+    });
+  });
+
+  it('un motivo vacio es 400', async () => {
+    // Un `failed` sin explicacion no le sirve a nadie: ni al estudiante, ni a
+    // quien mire la fila dentro de un mes.
+    expect((await invocar(failReport, fallar({ reason: '' }))).statusCode).toBe(400);
+  });
+
+  it('un motivo kilometrico es 400 y no acaba en la fila', async () => {
+    // Acota un traceback entero: no le dice nada a un estudiante y regala el
+    // mapa de nuestros modulos a quien mire la respuesta.
+    const ev = fallar({ reason: 'x'.repeat(501) });
+
+    expect((await invocar(failReport, ev)).statusCode).toBe(400);
+    expect(mockFail).not.toHaveBeenCalled();
+  });
+
+  it('sin reportId en la ruta, 400', async () => {
+    const ev = makeEvent({
+      routeKey: 'POST /v1/reports/{reportId}/fail',
+      body: JSON.stringify({ reason: 'x' }),
+    });
+
+    expect((await invocar(failReport, ev)).statusCode).toBe(400);
+  });
+
+  it('sin token, 401', async () => {
+    const ev = makeEvent(
+      { pathParameters: { reportId: INFORME }, body: JSON.stringify({ reason: 'x' }) },
+      false,
+    );
+
+    expect((await invocar(failReport, ev)).statusCode).toBe(401);
   });
 });
 
