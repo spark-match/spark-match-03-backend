@@ -306,7 +306,7 @@ describe('createOrientationReportRepository', () => {
       const uso = await repo.chargeableUsage('u-1', DESDE);
 
       expect(uso.total).toBe(10);
-      expect(uso.total >= 3).toBe(true);
+      expect(uso.total).toBeGreaterThanOrEqual(3);
     });
 
     it('devuelve la fecha del más viejo', async () => {

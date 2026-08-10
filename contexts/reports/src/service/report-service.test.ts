@@ -62,7 +62,7 @@ const config = {
 } as unknown as ReportsConfig;
 
 /**
- * El servicio con todo mockeado y el reloj parado.
+ * El servicio con las dependencias mockeadas y el reloj parado.
  *
  * `now` va fijo por defecto porque dos de las reglas que hay aqui son
  * temporales -- el barrido de diez minutos y la ventana de veinticuatro horas

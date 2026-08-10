@@ -200,7 +200,7 @@ export function createReportService(deps: ReportServiceDeps): ReportService {
    * El `null` del repositorio es la unica pieza interesante. `markReady` y
    * `markFailed` llevan `where status = 'pending'`, asi que devolver `null`
    * significa **"existe, es tuyo, y ya estaba cerrado"** -- no "no existe".
-   * Merece un 409 y no un 404, y sobre todo no un 200 silencioso: quien
+   * Merece un 409 y no un 404, y menos aun un 200 silencioso: quien
    * reintenta un cierre necesita distinguir entre "listo" y "llegaste tarde,
    * el informe que hay no es el que acabas de subir". La diferencia importa
    * porque los objetos del segundo se quedan huerfanos en el bucket, y con un
@@ -331,9 +331,9 @@ export function createReportService(deps: ReportServiceDeps): ReportService {
     },
 
     /**
-     * El informe salio bien: quedan anotados el bucket, las dos claves y todo
-     * lo que hace falta para volver a encontrarlo y para auditarlo cuando la
-     * traza de LangSmith haya caducado (D10).
+     * El informe salio bien: quedan anotados el bucket, las dos claves y lo
+     * demas que hace falta para volver a encontrarlo y para auditarlo cuando
+     * la traza de LangSmith haya caducado (D10).
      */
     async complete({ actorUserId, reportId, result }) {
       const cerrado = await cerrar(actorUserId, reportId, () =>

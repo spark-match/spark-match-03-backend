@@ -71,7 +71,7 @@ export type CreateReportBody = z.infer<typeof CreateReportInputSchema>;
 /**
  * `POST /v1/reports/{reportId}/complete` — lo que el generador devuelve.
  *
- * Todo lo que la restriccion `orientation_report_ready_is_complete` de la
+ * Cada campo que la restriccion `orientation_report_ready_is_complete` de la
  * migracion 006 exige va aqui como obligatorio. Asi un cierre incompleto se
  * rechaza en el borde, con un 400 que dice que campo falta, en vez de morir
  * contra la restriccion a las tres de la mañana con un error de Postgres.
