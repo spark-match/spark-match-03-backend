@@ -273,12 +273,14 @@ describe('createOrientationReportRepository', () => {
 
   describe('chargeableUsage', () => {
     const DESDE = new Date('2026-08-09T12:00:00.000Z');
+    /** El umbral del pendiente muerto: diez minutos antes del final de la ventana. */
+    const PENDIENTES_DESDE = new Date('2026-08-10T11:50:00.000Z');
 
     it('acota por estudiante, por ventana y por estado', async () => {
-      const db = buildDb({ total: '2', oldest: DESDE });
+      const db = buildDb({ total: '2', oldest: DESDE, pending: '0' });
       const repo = createOrientationReportRepository(db as never);
 
-      await repo.chargeableUsage('u-1', DESDE);
+      await repo.chargeableUsage('u-1', DESDE, PENDIENTES_DESDE);
 
       expect(db.where).toHaveBeenCalledWith('user_id', '=', 'u-1');
       expect(db.where).toHaveBeenCalledWith('created_at', '>=', DESDE);
@@ -288,44 +290,66 @@ describe('createOrientationReportRepository', () => {
     it('los fallidos quedan fuera del filtro de estado', async () => {
       // Cobrarle al estudiante tres intentos rotos y dejarlo sin informe hasta
       // mañana es hacerle pagar nuestra avería.
-      const db = buildDb({ total: '0', oldest: null });
+      const db = buildDb({ total: '0', oldest: null, pending: '0' });
       const repo = createOrientationReportRepository(db as never);
 
-      await repo.chargeableUsage('u-1', DESDE);
+      await repo.chargeableUsage('u-1', DESDE, PENDIENTES_DESDE);
 
       const estados = db.where.mock.calls.find((c) => c[0] === 'status')?.[2] as string[];
       expect(estados).not.toContain('failed');
     });
 
+    it('los pendientes muertos se descartan con una condición aparte', async () => {
+      // El `or` es lo que separa "listo, cuenta siempre" de "pendiente, solo si
+      // sigue vivo". Sin él, un pendiente colgado le come una plaza al
+      // estudiante hasta que alguien barra — y quien solo lee no barre.
+      const db = buildDb({ total: '1', oldest: DESDE, pending: '0' });
+      const repo = createOrientationReportRepository(db as never);
+
+      await repo.chargeableUsage('u-1', DESDE, PENDIENTES_DESDE);
+
+      const condiciones = db.where.mock.calls.filter((c) => typeof c[0] === 'function');
+      expect(condiciones).toHaveLength(1);
+    });
+
     it('convierte a número el COUNT que llega como texto', async () => {
       // Sin esto, `total >= tope` compara una cadena: '10' >= 3 es falso y el
       // tope dejaría de existir justo cuando más se ha usado.
-      const db = buildDb({ total: '10', oldest: DESDE });
+      const db = buildDb({ total: '10', oldest: DESDE, pending: '1' });
       const repo = createOrientationReportRepository(db as never);
 
-      const uso = await repo.chargeableUsage('u-1', DESDE);
+      const uso = await repo.chargeableUsage('u-1', DESDE, PENDIENTES_DESDE);
 
       expect(uso.total).toBe(10);
       expect(uso.total).toBeGreaterThanOrEqual(3);
+      // El de los pendientes llega igual de crudo y se usa como `pending > 0`,
+      // que con la cadena '0' sería verdadero.
+      expect(uso.pending).toBe(1);
     });
 
     it('devuelve la fecha del más viejo', async () => {
-      const db = buildDb({ total: '2', oldest: DESDE });
+      const db = buildDb({ total: '2', oldest: DESDE, pending: '0' });
       const repo = createOrientationReportRepository(db as never);
 
-      expect((await repo.chargeableUsage('u-1', DESDE)).oldest).toBe(DESDE);
+      expect((await repo.chargeableUsage('u-1', DESDE, PENDIENTES_DESDE)).oldest).toBe(DESDE);
     });
 
     it('sin filas, cero y sin fecha', async () => {
       const repo = createOrientationReportRepository(buildDb(undefined) as never);
 
-      expect(await repo.chargeableUsage('u-1', DESDE)).toEqual({ total: 0, oldest: null });
+      expect(await repo.chargeableUsage('u-1', DESDE, PENDIENTES_DESDE)).toEqual({
+        total: 0,
+        oldest: null,
+        pending: 0,
+      });
     });
 
     it('un fallo de base de datos sigue siendo 503', async () => {
       const repo = createOrientationReportRepository(buildFailingDb(new Error('caída')) as never);
 
-      await expect(repo.chargeableUsage('u-1', DESDE)).rejects.toMatchObject({ statusCode: 503 });
+      await expect(repo.chargeableUsage('u-1', DESDE, PENDIENTES_DESDE)).rejects.toMatchObject({
+        statusCode: 503,
+      });
     });
   });
 

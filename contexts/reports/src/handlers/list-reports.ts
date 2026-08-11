@@ -10,6 +10,12 @@
 // browses thousands of rows; a student has a handful of reports and paging
 // them would be machinery in search of a problem. The repository caps the
 // limit anyway, so a caller asking for ten thousand gets two hundred.
+//
+// Since 2026-08-11 it also answers whether another report can be requested
+// (`eligibility`). That is what lets the agent ask BEFORE delegating instead of
+// finding out at `POST /v1/reports`, i.e. after a full report has been written.
+// See `ReportEligibility` in the service for why it rides along here rather
+// than on a route of its own.
 // =============================================================================
 
 import { buildHandler } from '@spark-match/shared/templates';
@@ -22,10 +28,12 @@ import {
   ListReportsInputSchema,
   ListReportsOutputSchema,
   type Report,
+  type ReportEligibility,
 } from '../schemas/report.schema.js';
 
 interface ListReportsResponse {
   reports: Report[];
+  eligibility: ReportEligibility | null;
 }
 
 export const handler = buildHandler<unknown, ListReportsResponse>({
@@ -46,7 +54,10 @@ export const handler = buildHandler<unknown, ListReportsResponse>({
     }
 
     const ctx = await buildContext();
-    const informes = await ctx.reportService.list({ actorUserId: auth.userId, limit });
-    return { reports: informes.map(toPublicReport) };
+    const { reports, eligibility } = await ctx.reportService.list({
+      actorUserId: auth.userId,
+      limit,
+    });
+    return { reports: reports.map(toPublicReport), eligibility };
   },
 });
