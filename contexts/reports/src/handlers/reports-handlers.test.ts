@@ -416,8 +416,18 @@ describe('GET /v1/reports/{reportId}', () => {
 });
 
 describe('GET /v1/reports', () => {
+  /** Lo que el servicio contesta: el historico y si cabe otro informe. */
+  const ELEGIBLE = {
+    limit: 3,
+    used: 1,
+    remaining: 2,
+    retryAfter: null,
+    generating: false,
+    minProfileCompleteness: 0.6,
+  };
+
   it('lista los del que llama', async () => {
-    mockList.mockResolvedValue([FILA]);
+    mockList.mockResolvedValue({ reports: [FILA], eligibility: ELEGIBLE });
 
     const respuesta = await invocar(listReports, makeEvent());
 
@@ -426,8 +436,17 @@ describe('GET /v1/reports', () => {
     expect(mockList).toHaveBeenCalledWith({ actorUserId: USUARIO, limit: undefined });
   });
 
+  it('publica la elegibilidad junto al historico', async () => {
+    // Es lo que lee el agente antes de delegar la redaccion del informe.
+    mockList.mockResolvedValue({ reports: [], eligibility: { ...ELEGIBLE, remaining: 0 } });
+
+    const respuesta = await invocar(listReports, makeEvent());
+
+    expect(JSON.parse(respuesta.body).data.eligibility.remaining).toBe(0);
+  });
+
   it('pasa el limite cuando viene', async () => {
-    mockList.mockResolvedValue([]);
+    mockList.mockResolvedValue({ reports: [], eligibility: ELEGIBLE });
 
     await invocar(listReports, makeEvent({ queryStringParameters: { limit: '5' } }));
 

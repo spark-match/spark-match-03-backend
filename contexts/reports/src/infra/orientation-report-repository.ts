@@ -43,10 +43,17 @@ const MAX_LIST_LIMIT = 200;
  * pregunta que le importa a quien acaba de chocar con el tope: cuando podra
  * pedir otro. La respuesta es cuando el mas viejo de estos salga de la
  * ventana, y eso no se deduce del recuento.
+ *
+ * Y lleva `pending` porque el agente pregunta por esto ANTES de ponerse a
+ * escribir, y "te queda una plaza" y "te queda una plaza pero ya estas
+ * generando" llevan a dos cosas distintas: en el segundo caso no hay que
+ * empezar, hay que esperar. Del `total` no se deduce -- son informes, no
+ * estados.
  */
 export interface ReportUsage {
   total: number;
   oldest: Date | null;
+  pending: number;
 }
 
 export interface OrientationReportRepository {
@@ -55,7 +62,7 @@ export interface OrientationReportRepository {
   findById(id: string): Promise<OrientationReport | null>;
   findPendingByUser(userId: string): Promise<OrientationReport | null>;
   listByUser(userId: string, limit?: number): Promise<OrientationReport[]>;
-  chargeableUsage(userId: string, since: Date): Promise<ReportUsage>;
+  chargeableUsage(userId: string, since: Date, pendingSince: Date): Promise<ReportUsage>;
   markReady(id: string, input: CompleteReportInput): Promise<OrientationReport | null>;
   markFailed(id: string, reason: string): Promise<OrientationReport | null>;
   failStalePending(userId: string, before: Date, reason: string): Promise<number>;
@@ -231,11 +238,21 @@ export function createOrientationReportRepository(
      *
      * `pending` si cuenta. Es uno que se esta generando ahora mismo, o sea una
      * llamada al modelo ya en marcha, y el ADR mide el tope en llamadas.
+     *
+     * **`pendingSince` es lo que hace que un pendiente muerto no cobre.** Un
+     * `pending` que se quedo colgado sigue siendo `pending` en la tabla hasta
+     * que alguien lo barra, y `request` lo barre justo antes de contar. Quien
+     * solo lee -- el agente preguntando si puede empezar -- no barre nada, y
+     * sin este filtro contaria plazas ocupadas por generaciones que ya estaban
+     * muertas: le diriamos "has llegado al tope" a un estudiante al que
+     * `request` le habria abierto el informe sin rechistar. `request` pasa el
+     * mismo umbral que acaba de usar para barrer, donde es un no-op, para que
+     * la regla este escrita una vez y no dependa de si quien llama barrio.
      */
-    async chargeableUsage(userId: string, since: Date): Promise<ReportUsage> {
+    async chargeableUsage(userId: string, since: Date, pendingSince: Date): Promise<ReportUsage> {
       return withDbErrorMapping('orientation_report.chargeableUsage', async () => {
-        // Las dos agregaciones en una consulta y no en dos: se filtran por lo
-        // mismo, asi que separarlas seria pagar dos viajes por la misma fila y
+        // Las tres agregaciones en una consulta y no en tres: se filtran por lo
+        // mismo, asi que separarlas seria pagar tres viajes por la misma fila y
         // abrir la puerta a que un informe entre entre medias y el recuento no
         // corresponda con la fecha.
         const fila = await base()
@@ -243,16 +260,24 @@ export function createOrientationReportRepository(
           .select(({ fn }) => [
             fn.countAll<string>().as('total'),
             fn.min<Date | null>('created_at').as('oldest'),
+            fn.countAll<string>().filterWhere('status', '=', 'pending').as('pending'),
           ])
           .where('user_id', '=', userId)
           .where('created_at', '>=', since)
           .where('status', 'in', ['ready', 'pending'])
+          .where((eb) =>
+            eb.or([eb('status', '=', 'ready'), eb('created_at', '>=', pendingSince)]),
+          )
           .executeTakeFirst();
 
         // COUNT(*) es BIGINT y node-postgres lo trae como string, por la misma
         // razon que el NUMERIC de arriba. Sin el Number, `total >= tope`
         // compara una cadena y '10' >= 3 es falso.
-        return { total: Number(fila?.total ?? 0), oldest: fila?.oldest ?? null };
+        return {
+          total: Number(fila?.total ?? 0),
+          oldest: fila?.oldest ?? null,
+          pending: Number(fila?.pending ?? 0),
+        };
       });
     },
 

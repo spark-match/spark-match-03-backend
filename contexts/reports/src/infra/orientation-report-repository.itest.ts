@@ -279,6 +279,18 @@ describe('el resto del repositorio contra la tabla de verdad', () => {
     expect(cerrado!.createdAt.getTime()).toBe(abierto.createdAt.getTime());
   });
 
+  /** El principio de la ventana móvil de 24 h del tope (D9). */
+  const haceUnDia = () => new Date(Date.now() - 86_400_000);
+
+  /**
+   * El umbral del pendiente muerto, holgado a propósito.
+   *
+   * Una hora en el futuro haría que TODO pendiente cuente como muerto; una hora
+   * en el pasado, que ninguno lo sea. Los casos que no van de eso pasan el
+   * segundo, para que un pendiente recién creado siga contando.
+   */
+  const pendientesVivos = () => new Date(Date.now() - 3_600_000);
+
   it('chargeableUsage no cuenta los fallidos', async () => {
     // Un informe que falló no le dio nada al estudiante, y casi siempre falló
     // por algo nuestro. Cobrárselo sería hacerle pagar nuestra avería.
@@ -288,7 +300,7 @@ describe('el resto del repositorio contra la tabla de verdad', () => {
     const roto = await repo.create({ userId });
     await repo.markFailed(roto.id, 'sin pdf');
 
-    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+    const uso = await repo.chargeableUsage(userId, haceUnDia(), pendientesVivos());
 
     expect(uso.total).toBe(1);
   });
@@ -298,9 +310,36 @@ describe('el resto del repositorio contra la tabla de verdad', () => {
     const repo = createOrientationReportRepository(db);
     await repo.create({ userId });
 
-    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+    const uso = await repo.chargeableUsage(userId, haceUnDia(), pendientesVivos());
 
     expect(uso.total).toBe(1);
+    expect(uso.pending).toBe(1);
+  });
+
+  it('chargeableUsage no cuenta un pendiente que ya está muerto', async () => {
+    // Quien sólo lee no barre, así que sin este filtro un pendiente colgado le
+    // comería una plaza al estudiante: le diríamos «has llegado al tope» a
+    // alguien a quien `request` le abriría el informe sin rechistar.
+    const repo = createOrientationReportRepository(db);
+    await repo.create({ userId });
+
+    const uso = await repo.chargeableUsage(userId, haceUnDia(), new Date(Date.now() + 60_000));
+
+    expect(uso.total).toBe(0);
+    expect(uso.pending).toBe(0);
+  });
+
+  it('el umbral del pendiente muerto no toca a los que ya están listos', async () => {
+    // El `or` de la consulta separa los dos estados. Un informe emitido cuenta
+    // durante las 24 h enteras, por muy viejo que sea dentro de la ventana.
+    const repo = createOrientationReportRepository(db);
+    const listo = await repo.create({ userId });
+    await repo.markReady(listo.id, COMPLETO);
+
+    const uso = await repo.chargeableUsage(userId, haceUnDia(), new Date(Date.now() + 60_000));
+
+    expect(uso.total).toBe(1);
+    expect(uso.pending).toBe(0);
   });
 
   it('chargeableUsage deja fuera lo anterior a la ventana', async () => {
@@ -308,7 +347,11 @@ describe('el resto del repositorio contra la tabla de verdad', () => {
     const abierto = await repo.create({ userId });
     await repo.markReady(abierto.id, COMPLETO);
 
-    const uso = await repo.chargeableUsage(userId, new Date(Date.now() + 60_000));
+    const uso = await repo.chargeableUsage(
+      userId,
+      new Date(Date.now() + 60_000),
+      pendientesVivos(),
+    );
 
     expect(uso.total).toBe(0);
     expect(uso.oldest).toBeNull();
@@ -323,7 +366,7 @@ describe('el resto del repositorio contra la tabla de verdad', () => {
     await sql`SELECT pg_sleep(0.01)`.execute(db);
     const segundo = await repo.create({ userId });
 
-    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+    const uso = await repo.chargeableUsage(userId, haceUnDia(), pendientesVivos());
 
     expect(uso.total).toBe(2);
     expect(uso.oldest?.getTime()).toBe(primero.createdAt.getTime());
@@ -335,7 +378,7 @@ describe('el resto del repositorio contra la tabla de verdad', () => {
     const otro = await crearUsuario('ajeno-tope@spark-match.test');
     await repo.create({ userId: otro });
 
-    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+    const uso = await repo.chargeableUsage(userId, haceUnDia(), pendientesVivos());
 
     expect(uso.total).toBe(0);
   });
@@ -346,9 +389,12 @@ describe('el resto del repositorio contra la tabla de verdad', () => {
     const repo = createOrientationReportRepository(db);
     await repo.create({ userId });
 
-    const uso = await repo.chargeableUsage(userId, new Date(Date.now() - 86_400_000));
+    const uso = await repo.chargeableUsage(userId, haceUnDia(), pendientesVivos());
 
     expect(typeof uso.total).toBe('number');
+    // El de los pendientes viaja por el mismo camino y se lee como
+    // `pending > 0`, que con la cadena '0' sería verdadero.
+    expect(typeof uso.pending).toBe('number');
   });
 
   it('borrar al estudiante se lleva sus informes', async () => {
