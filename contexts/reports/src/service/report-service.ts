@@ -9,7 +9,10 @@
 import { ApiError } from '@spark-match/shared/http';
 import type { createLogger } from '@spark-match/shared/logger';
 import type { CompleteReportInput, OrientationReport } from '../domain/orientation-report.js';
-import type { OrientationReportRepository } from '../infra/orientation-report-repository.js';
+import type {
+  OrientationReportRepository,
+  ReportUsage,
+} from '../infra/orientation-report-repository.js';
 import {
   CONTENT_TYPES,
   type ReportObjectKind,
@@ -67,10 +70,55 @@ export interface ProfileGateInput {
   riasecCode: string | null;
 }
 
+/**
+ * Lo que la puerta contestaria ahora mismo, **menos las dos cifras que solo
+ * sabe el agente**.
+ *
+ * Existe porque las puertas se abrian demasiado tarde. `request` es la ultima
+ * llamada de la generacion, asi que un estudiante que ya habia gastado sus tres
+ * informes se enteraba despues de que el subagente escribiera el suyo entero:
+ * medido en dev el 2026-08-11, 44,9 s de redaccion y sus tokens para acabar en
+ * un 429. Publicando esto en el listado, quien va a delegar puede preguntar
+ * primero y no empezar.
+ *
+ * **No es una segunda puerta.** Es la MISMA, leida antes: sale de la misma
+ * cuenta y del mismo parametro SSM que usa `request`, que sigue siendo quien
+ * decide. Lo que se publica aqui no autoriza nada -- entre la lectura y la
+ * escritura cabe otro informe -- y por eso `request` no confia en ello.
+ *
+ * `minProfileCompleteness` viaja aunque el backend no pueda comprobarlo solo:
+ * el perfil vive en el store del agente (ver `ProfileGateInput`), asi que la
+ * unica forma de que el umbral se evalue antes de trabajar es que quien tiene
+ * la cifra tenga tambien el umbral. Sale de SSM, no de una constante duplicada.
+ */
+export interface ReportEligibility {
+  /** Cuantos informes admite la ventana movil de 24 h (D9). */
+  limit: number;
+  /** Cuantos ha gastado ya dentro de esa ventana. */
+  used: number;
+  /** Lo que le queda, nunca negativo. */
+  remaining: number;
+  /** Cuando se libera la siguiente plaza, o `null` si todavia hay hueco. */
+  retryAfter: string | null;
+  /** Si tiene una generacion viva ahora mismo (D4, el indice de un pendiente). */
+  generating: boolean;
+  /** El umbral de completitud de D8, para que el agente lo mire con su perfil. */
+  minProfileCompleteness: number;
+}
+
+export interface ReportListing {
+  reports: OrientationReport[];
+  /**
+   * `null` cuando no se pudo calcular. Ver `list`: el historico no puede caerse
+   * porque los umbrales no esten disponibles.
+   */
+  eligibility: ReportEligibility | null;
+}
+
 export interface ReportService {
   request(input: { userId: string } & ProfileGateInput): Promise<OrientationReport>;
   get(input: { actorUserId: string; reportId: string }): Promise<OrientationReport>;
-  list(input: { actorUserId: string; limit?: number }): Promise<OrientationReport[]>;
+  list(input: { actorUserId: string; limit?: number }): Promise<ReportListing>;
   getContent(input: {
     actorUserId: string;
     reportId: string;
@@ -175,10 +223,53 @@ export function createReportService(deps: ReportServiceDeps): ReportService {
    * seria mas facil y estaria casi siempre mal: quien pidio sus tres informes
    * esta mañana puede volver a pedir esta mañana, no mañana por la noche.
    */
+  /**
+   * Lo gastado de la ventana, con los pendientes muertos ya descontados.
+   *
+   * Un solo sitio que arma los dos umbrales, porque las dos lecturas que hay
+   * -- la puerta y el listado -- tienen que contar exactamente igual. Si una
+   * cuenta un pendiente colgado y la otra no, el agente y el backend se
+   * contradicen delante del estudiante.
+   */
+  function usoVigente(userId: string): Promise<ReportUsage> {
+    const ahoraMs = ahora().getTime();
+    return deps.reportRepository.chargeableUsage(
+      userId,
+      new Date(ahoraMs - VENTANA_TOPE_MS),
+      new Date(ahoraMs - PENDIENTE_MUERTO_MS),
+    );
+  }
+
+  /** Ver :ref:`ReportEligibility`. Se lee, no autoriza. */
+  async function calcularElegibilidad(userId: string): Promise<ReportEligibility> {
+    const [tope, minimo, gastado] = await Promise.all([
+      deps.reportsConfig.maxPerUserPerDay(),
+      deps.reportsConfig.minProfileCompleteness(),
+      usoVigente(userId),
+    ]);
+
+    // La fecha solo se publica cuando de verdad no hay hueco. Con plazas
+    // libres, "vuelve a las seis" es informacion falsa aunque el numero sea
+    // correcto: se puede pedir ya.
+    const agotado = gastado.total >= tope;
+    const libre =
+      agotado && gastado.oldest !== null
+        ? new Date(gastado.oldest.getTime() + VENTANA_TOPE_MS).toISOString()
+        : null;
+
+    return {
+      limit: tope,
+      used: gastado.total,
+      remaining: Math.max(0, tope - gastado.total),
+      retryAfter: libre,
+      generating: gastado.pending > 0,
+      minProfileCompleteness: minimo,
+    };
+  }
+
   async function comprobarTope(userId: string): Promise<void> {
     const tope = await deps.reportsConfig.maxPerUserPerDay();
-    const desde = new Date(ahora().getTime() - VENTANA_TOPE_MS);
-    const gastado = await deps.reportRepository.chargeableUsage(userId, desde);
+    const gastado = await usoVigente(userId);
 
     if (gastado.total >= tope) {
       // El `?? ahora()` no puede darse -- si el total llego al tope hay al
@@ -326,8 +417,35 @@ export function createReportService(deps: ReportServiceDeps): ReportService {
       };
     },
 
-    async list({ actorUserId, limit }) {
-      return deps.reportRepository.listByUser(actorUserId, limit);
+    /**
+     * El historico del estudiante y, al lado, si puede pedir otro.
+     *
+     * Las dos cosas en la misma respuesta y no en un endpoint aparte: quien
+     * pregunta esto -- la pantalla de informes y el coordinador antes de
+     * delegar -- quiere las dos, y un `GET` mas seria otra Lambda, otro arranque
+     * en frio y otra ruta que mantener para devolver seis numeros que salen de
+     * la consulta que ya estabamos haciendo.
+     *
+     * **La elegibilidad no puede tumbar el historico.** Calcularla necesita los
+     * dos parametros de SSM, y hasta ahora leer los informes propios no
+     * dependia de SSM para nada. Sin este `catch`, un parametro mal escrito o
+     * un SSM inalcanzable dejaria al estudiante sin ver los informes que YA
+     * tiene, por culpa de un numero que solo sirve para saber si cabe otro.
+     * Sale `null`, que quien lo lee ya trata como "no se sabe". Donde ese fallo
+     * si tiene que sonar es en `request`, y ahi sigue sonando.
+     */
+    async list({ actorUserId, limit }): Promise<ReportListing> {
+      const [reports, eligibility] = await Promise.all([
+        deps.reportRepository.listByUser(actorUserId, limit),
+        calcularElegibilidad(actorUserId).catch((err: unknown) => {
+          deps.logger.error('No se pudo calcular la elegibilidad del informe', {
+            actorUserId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return null;
+        }),
+      ]);
+      return { reports, eligibility };
     },
 
     /**

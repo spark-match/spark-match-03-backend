@@ -109,7 +109,34 @@ export type FailReportBody = z.infer<typeof FailReportInputSchema>;
 export const GetReportInputSchema = z.object({});
 export const GetReportOutputSchema = ReportSchema;
 
+/**
+ * Si el estudiante puede pedir otro informe, y con que margen.
+ *
+ * Viaja pegado al listado y no en una ruta propia: ver `report-service.ts`. Lo
+ * consume el agente ANTES de delegar la redaccion, para no escribir un informe
+ * entero y descubrir al registrarlo que no habia plaza.
+ *
+ * `retryAfter` es nullable y no opcional: "todavia hay hueco" es una respuesta,
+ * no un campo que falta, y un opcional obligaria a quien lo lee a distinguir
+ * entre las dos cosas sin tener con que.
+ */
+export const ReportEligibilitySchema = z.object({
+  limit: z.number().int().positive(),
+  used: z.number().int().nonnegative(),
+  remaining: z.number().int().nonnegative(),
+  retryAfter: z.iso.datetime().nullable(),
+  generating: z.boolean(),
+  minProfileCompleteness: z.number().min(0).max(1),
+});
+export type ReportEligibility = z.infer<typeof ReportEligibilitySchema>;
+
 export const ListReportsInputSchema = z.object({});
 export const ListReportsOutputSchema = z.object({
   reports: z.array(ReportSchema),
+  /**
+   * `null` cuando no se pudo calcular -- ver `list` en el servicio. Quien lo
+   * lee lo trata como "no se sabe" y decide sin ello, que es como funcionaba
+   * antes de que este bloque existiera.
+   */
+  eligibility: ReportEligibilitySchema.nullable(),
 });

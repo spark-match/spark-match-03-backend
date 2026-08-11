@@ -41,7 +41,7 @@ function buildRepo(overrides: Partial<OrientationReportRepository> = {}) {
     findById: vi.fn().mockResolvedValue(null),
     findPendingByUser: vi.fn().mockResolvedValue(null),
     listByUser: vi.fn().mockResolvedValue([]),
-    chargeableUsage: vi.fn().mockResolvedValue({ total: 0, oldest: null }),
+    chargeableUsage: vi.fn().mockResolvedValue({ total: 0, oldest: null, pending: 0 }),
     markReady: vi.fn(),
     markFailed: vi.fn(),
     failStalePending: vi.fn().mockResolvedValue(0),
@@ -281,15 +281,16 @@ describe('request · puerta de completitud (D8)', () => {
   });
 });
 
-describe('request · tope diario (D9)', () => {
-  /** Uso con `total` informes, el más viejo hace `haceHoras` horas. */
-  function gastado(total: number, haceHoras = 20) {
-    return vi.fn().mockResolvedValue({
-      total,
-      oldest: new Date(AHORA.getTime() - haceHoras * 60 * 60 * 1000),
-    });
-  }
+/** Uso con `total` informes, el más viejo hace `haceHoras` horas. */
+function gastado(total: number, haceHoras = 20, pending = 0) {
+  return vi.fn().mockResolvedValue({
+    total,
+    oldest: new Date(AHORA.getTime() - haceHoras * 60 * 60 * 1000),
+    pending,
+  });
+}
 
+describe('request · tope diario (D9)', () => {
   it('cuenta sólo las últimas 24 h y sólo las de ese estudiante', async () => {
     const repo = buildRepo();
 
@@ -298,6 +299,18 @@ describe('request · tope diario (D9)', () => {
     const [usuario, desde] = repo.chargeableUsage.mock.calls[0];
     expect(usuario).toBe(DUEÑO);
     expect(AHORA.getTime() - (desde as Date).getTime()).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it('los pendientes muertos no cuentan, con barrido o sin él', async () => {
+    // `request` barre antes de contar, así que aquí el umbral es un no-op. Va
+    // igual para que la regla no dependa de si quien llama barrió: el listado
+    // no barre y tiene que contar exactamente lo mismo.
+    const repo = buildRepo();
+
+    await crearServicio(repo).request({ userId: DUEÑO, ...PERFIL_OK });
+
+    const [, , pendientesDesde] = repo.chargeableUsage.mock.calls[0];
+    expect(AHORA.getTime() - (pendientesDesde as Date).getTime()).toBe(10 * 60 * 1000);
   });
 
   it('en el tope, 429 y no se abre nada', async () => {
@@ -557,6 +570,113 @@ describe('list', () => {
     await crearServicio(repo).list({ actorUserId: DUEÑO, limit: 5 });
 
     expect(repo.listByUser).toHaveBeenCalledWith(DUEÑO, 5);
+  });
+
+  it('dice lo que queda del tope y el umbral de completitud', async () => {
+    // Es lo que le permite al agente preguntar ANTES de delegar la redacción,
+    // en vez de escribir el informe entero y chocar con el 429 al registrarlo.
+    mockTope.mockResolvedValue(3);
+    mockCompletitud.mockResolvedValue(0.6);
+    const repo = buildRepo({ chargeableUsage: gastado(1) });
+
+    const { eligibility } = await crearServicio(repo).list({ actorUserId: DUEÑO });
+
+    expect(eligibility).toEqual({
+      limit: 3,
+      used: 1,
+      remaining: 2,
+      retryAfter: null,
+      generating: false,
+      minProfileCompleteness: 0.6,
+    });
+  });
+
+  it('con el tope agotado dice cuándo se reabre', async () => {
+    mockTope.mockResolvedValue(3);
+    const repo = buildRepo({ chargeableUsage: gastado(3, 20) });
+
+    const { eligibility } = await crearServicio(repo).list({ actorUserId: DUEÑO });
+
+    expect(eligibility.remaining).toBe(0);
+    // El más viejo entró hace 20 h: sale de la ventana dentro de 4.
+    expect(eligibility.retryAfter).toBe(
+      new Date(AHORA.getTime() + 4 * 60 * 60 * 1000).toISOString(),
+    );
+  });
+
+  it('con plazas libres no hay fecha de reapertura', async () => {
+    // Un `retryAfter` correcto pero presente diría «vuelve a las seis» a quien
+    // puede pedirlo ya. La ausencia es la respuesta.
+    mockTope.mockResolvedValue(3);
+    const repo = buildRepo({ chargeableUsage: gastado(2) });
+
+    const { eligibility } = await crearServicio(repo).list({ actorUserId: DUEÑO });
+
+    expect(eligibility.retryAfter).toBeNull();
+  });
+
+  it('lo que queda nunca es negativo', async () => {
+    // Pasa de verdad: el barrido de `request` puede dejar entrar un cuarto
+    // informe cuando el tope son tres. Un `remaining: -1` no significa nada
+    // para quien lo lee.
+    mockTope.mockResolvedValue(3);
+    const repo = buildRepo({ chargeableUsage: gastado(4) });
+
+    const { eligibility } = await crearServicio(repo).list({ actorUserId: DUEÑO });
+
+    expect(eligibility.remaining).toBe(0);
+  });
+
+  it('avisa de una generación viva aunque queden plazas', async () => {
+    // «Te queda una» y «te queda una pero ya estás generando» llevan a cosas
+    // distintas: en el segundo caso no hay que empezar, hay que esperar.
+    mockTope.mockResolvedValue(3);
+    const repo = buildRepo({ chargeableUsage: gastado(1, 20, 1) });
+
+    const { eligibility } = await crearServicio(repo).list({ actorUserId: DUEÑO });
+
+    expect(eligibility.generating).toBe(true);
+    expect(eligibility.remaining).toBe(2);
+  });
+
+  it('el historial y la elegibilidad salen de la misma llamada', async () => {
+    const repo = buildRepo({ listByUser: vi.fn().mockResolvedValue([informe()]) });
+
+    const listado = await crearServicio(repo).list({ actorUserId: DUEÑO });
+
+    expect(listado.reports).toHaveLength(1);
+    expect(listado.eligibility?.limit).toBe(3);
+  });
+
+  it('si no se puede calcular la elegibilidad, el historial sale igual', async () => {
+    // Leer los informes propios nunca dependió de SSM. Un parámetro mal escrito
+    // no puede dejar al estudiante sin ver los que YA tiene por culpa de un
+    // número que sólo sirve para saber si cabe otro.
+    mockTope.mockRejectedValue(new Error('SSM no contesta'));
+    const repo = buildRepo({ listByUser: vi.fn().mockResolvedValue([informe()]) });
+
+    const listado = await crearServicio(repo).list({ actorUserId: DUEÑO });
+
+    expect(listado.reports).toHaveLength(1);
+    expect(listado.eligibility).toBeNull();
+  });
+
+  it('ese fallo se registra, no se traga en silencio', async () => {
+    mockCompletitud.mockRejectedValue(new Error('SSM no contesta'));
+
+    await crearServicio().list({ actorUserId: DUEÑO });
+
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  it('pero en `request` el mismo fallo sí revienta', async () => {
+    // Donde el umbral gobierna una decisión, un fallo de configuración tiene
+    // que sonar: relajar la regla que configura sería peor que el error.
+    mockTope.mockRejectedValue(new Error('SSM no contesta'));
+
+    await expect(crearServicio().request({ userId: DUEÑO, ...PERFIL_OK })).rejects.toThrow(
+      'SSM no contesta',
+    );
   });
 });
 
