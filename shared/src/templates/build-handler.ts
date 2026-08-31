@@ -56,6 +56,50 @@ export interface HandlerConfig<TInput, TOutput> {
   requireAuth?: boolean;
   /** When true (default), handle CORS preflight + add CORS headers on responses. */
   enableCors?: boolean;
+  /**
+   * Status code for a successful response. Defaults to 200.
+   *
+   * Exists for endpoints that accept work rather than complete it: report
+   * generation answers `202` because the row is created `pending` and the
+   * artefact does not exist yet (ADR-019 D4). Answering 200 there would tell
+   * the client the resource is ready, and the polling loop that follows would
+   * be contradicting the response that started it.
+   */
+  successStatusCode?: number;
+}
+
+/**
+ * Lo que devuelve un handler que contesta con BYTES en vez de con el sobre
+ * JSON de `formatResponse`.
+ *
+ * Existe para los dos endpoints que sirven un informe ya generado. Ahi el
+ * sobre estorba por dos motivos: un PDF no cabe en un campo JSON, y el JSON
+ * del informe se sirve TAL CUAL sale de S3 a proposito -- el `checksumSha256`
+ * que guarda la fila describe esos bytes exactos, y reempaquetarlos haria que
+ * el checksum dejara de servir para comprobar lo que el cliente recibio.
+ *
+ * El resto del pipeline sigue puesto: auth, CORS, trazas y el manejo de
+ * errores. Lo unico que cambia es la forma de la respuesta con exito.
+ */
+export interface RawPayload {
+  readonly kind: 'raw';
+  contentType: string;
+  body: Buffer;
+  /** Si se indica, se manda `Content-Disposition: attachment`. */
+  fileName?: string;
+}
+
+export function rawPayload(body: Buffer, contentType: string, fileName?: string): RawPayload {
+  return { kind: 'raw', body, contentType, fileName };
+}
+
+function esRawPayload(value: unknown): value is RawPayload {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { kind?: unknown }).kind === 'raw' &&
+    Buffer.isBuffer((value as { body?: unknown }).body)
+  );
 }
 
 interface ResponseLike {
@@ -147,10 +191,12 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
   APIGatewayProxyEventV2,
   APIGatewayProxyResultV2
 > {
-  const applyHeaders = (request: middy.Request<APIGatewayProxyEventV2, APIGatewayProxyResultV2>): void => {
+  const applyHeaders = (
+    request: middy.Request<APIGatewayProxyEventV2, APIGatewayProxyResultV2>,
+  ): void => {
     if (request.response === undefined || request.response === null) return;
     const resp = asResponse(request.response);
-    const headers = (resp.headers ?? {});
+    const headers = resp.headers ?? {};
     // Compute the dynamic allow-origin from the request's Origin header
     const requestOrigin = request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
     const allowOrigin = selectAllowOrigin(requestOrigin, CORS_ALLOWED_ORIGINS);
@@ -169,7 +215,8 @@ function inlineCorsMiddleware(): middy.MiddlewareObj<
       const method = request.event.requestContext?.http?.method;
       if (method === 'OPTIONS') {
         // Preflight: compute allow-origin from request's Origin header
-        const requestOrigin = request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
+        const requestOrigin =
+          request.event.headers?.['origin'] ?? request.event.headers?.['Origin'];
         const allowOrigin = selectAllowOrigin(requestOrigin, CORS_ALLOWED_ORIGINS);
         const preflightHeaders: Record<string, string> = {};
         if (allowOrigin !== null) {
@@ -210,8 +257,23 @@ export function buildHandler<TInput, TOutput>(
       const input = validatePayload(config.inputSchema, rawBody) as TInput;
       const auth = config.requireAuth ? await requireAuth(event, config.logger) : undefined;
       const result = await config.handler(input, event, auth);
+      if (esRawPayload(result)) {
+        // `isBase64Encoded` no es opcional aunque el cuerpo sea texto: API
+        // Gateway decide por esta bandera si decodifica antes de responder, y
+        // mandar base64 sin ella entrega base64 al cliente.
+        const headers: Record<string, string> = { 'Content-Type': result.contentType };
+        if (result.fileName !== undefined) {
+          headers['Content-Disposition'] = `attachment; filename="${result.fileName}"`;
+        }
+        return {
+          statusCode: config.successStatusCode ?? 200,
+          body: result.body.toString('base64'),
+          isBase64Encoded: true,
+          headers,
+        };
+      }
       return {
-        statusCode: 200,
+        statusCode: config.successStatusCode ?? 200,
         body: JSON.stringify(formatResponse(result, requestId)),
         headers: { 'Content-Type': 'application/json' },
       };

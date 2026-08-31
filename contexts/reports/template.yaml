@@ -1,0 +1,483 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Reports Context - Orientation report request, polling and listing.
+
+# =============================================================================
+# Por que este contexto tiene su PROPIA HttpApi
+# =============================================================================
+# La idea obvia era colgar estas tres rutas de la API que ya existe en
+# contexts/identity. No se puede, y el motivo no es el que parecia.
+#
+# El primer obstaculo esta documentado en identity: el event source `HttpApi`
+# de SAM exige que `ApiId` referencie un recurso del MISMO template, asi que
+# pasar el id por parametro no vale. La salida aparente era declarar
+# `AWS::ApiGatewayV2::Route` e `Integration` crudos contra el id importado.
+#
+# Tampoco vale, y esto solo se ve mirando el stack desplegado. El
+# `AWS::ApiGatewayV2::Api` de identity tiene UNA sola propiedad: `Body`. Las 9
+# rutas y el authorizer son un import de OpenAPI que genera el transform; en
+# el stack no hay ni un recurso `Route`, ni `Integration`, ni `Authorizer`.
+# Dos consecuencias:
+#
+#   1. No hay `AuthorizerId` que exportar. El id real lo fabrica el import, no
+#      CloudFormation, asi que no hay nada que `!Ref` -- seria un literal
+#      distinto en cada ambiente.
+#   2. Una ruta cruda de otro stack no sobrevive. Cada deploy de identity
+#      reimporta el Body entero, y un import de OpenAPI REEMPLAZA la
+#      definicion de la API: las rutas anadidas por fuera se irian borrando en
+#      un deploy posterior, de forma intermitente. Es la peor manera de
+#      descubrir un fallo.
+#
+# Asi que cada contexto trae su API y sus rutas nacen con el grano de SAM. El
+# coste es que hay dos URLs base, que hoy es un valor de configuracion por
+# ambiente en el frontend. La alternativa -- sacar la API a un stack propio
+# con Api, Authorizer y Stage crudos y exportados -- es la correcta a largo
+# plazo, pero migra 10 rutas vivas de import a recursos sueltos y no se hace
+# de paso mientras se anade una funcionalidad.
+#
+# Lo que NO se duplica es el authorizer: se reusa el Lambda de identity por
+# ARN, asi que la decision de quien es quien sigue viviendo en un solo sitio.
+# =============================================================================
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  LogRetentionInDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 180, 365]
+    Description: CloudWatch Logs retention for the reports Lambdas.
+  VpcSubnetIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: Comma-separated list of VPC subnet IDs (for VPC-attached Lambdas).
+  VpcSecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: Comma-separated list of security group IDs (for VPC-attached Lambdas).
+  CorsAllowedOrigins:
+    Type: CommaDelimitedList
+    Default: '*'
+    Description: Comma-separated list of allowed CORS origins (forwarded from root stack).
+  IdentityAuthorizerFunctionArn:
+    Type: String
+    Description: >-
+      ARN del Lambda authorizer de identity. Se reusa en vez de declarar uno
+      propio para que exista una sola implementacion de "quien es este usuario".
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    MemorySize: 512
+    Timeout: 10
+    Tracing: Active
+    Environment:
+      Variables:
+        POWERTOOLS_SERVICE_NAME: !Sub 'reports-${Environment}'
+        ENVIRONMENT: !Ref Environment
+        CORS_ALLOWED_ORIGINS: !Join [',', !Ref CorsAllowedOrigins]
+        # Los bundles se generan con sourcemap; sin esta flag los stack traces
+        # de CloudWatch apuntan al JS bundleado en vez del TypeScript original.
+        NODE_OPTIONS: --enable-source-maps
+
+Conditions:
+  HasVpcConfig: !Not [!Equals [!Join ['', !Ref VpcSubnetIds], '']]
+
+Resources:
+  # ===========================================================================
+  # API Gateway HTTP API v2
+  # ===========================================================================
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: !Sub 'Spark Match Reports API (${Environment})'
+      CorsConfiguration:
+        AllowOrigins: !Ref CorsAllowedOrigins
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        ExposeHeaders:
+          - X-Correlation-Id
+        MaxAge: 600
+      # Cerrado por defecto, igual que identity: toda ruta nace protegida. Aqui
+      # no hay ninguna publica -- un informe de orientacion es el perfil
+      # psicometrico de un menor y ninguna de las tres rutas tiene sentido sin
+      # saber quien pregunta.
+      #
+      # `FunctionArn` apunta al Lambda de identity via parametro. SAM acepta un
+      # ARN cualquiera; lo que NO hace con un ARN externo es crear el
+      # AWS::Lambda::Permission, porque no puede referenciar un recurso que no
+      # esta en este template. Va declarado a mano mas abajo.
+      Auth:
+        DefaultAuthorizer: IdentityAuthorizer
+        Authorizers:
+          IdentityAuthorizer:
+            FunctionArn: !Ref IdentityAuthorizerFunctionArn
+            AuthorizerPayloadFormatVersion: '2.0'
+            EnableSimpleResponses: true
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 0
+      # Pedir un informe cuesta una generacion entera: modelo, render y subida.
+      # El limite es mucho mas bajo que el de una lectura porque el trabajo que
+      # dispara no es comparable, no porque se espere abuso.
+      RouteSettings:
+        'POST /v1/reports':
+          ThrottlingRateLimit: 2
+          ThrottlingBurstLimit: 5
+      Tags:
+        Project: spark-match
+        Environment: !Ref Environment
+
+  # Sin esto, toda peticion autenticada contra esta API responde 500: API
+  # Gateway no puede invocar el authorizer. `${HttpApi}/*` es la misma forma
+  # que genera SAM para el permiso equivalente en el stack de identity.
+  ReportsAuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref IdentityAuthorizerFunctionArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+  # ===========================================================================
+  # CloudWatch Log Groups
+  # ===========================================================================
+  # Declarados a mano y no dejados a Lambda: un log group implicito nace con
+  # retencion infinita y no lo cubre LogRetentionInDays.
+  ReportsCreateReportLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-create-report-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  ReportsGetReportLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-get-report-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  ReportsListReportsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-list-reports-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  ReportsGetReportContentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-get-report-content-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  ReportsGetReportPdfLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-get-report-pdf-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  ReportsCompleteReportLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-complete-report-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+  ReportsFailReportLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/spark-match-reports-fail-report-${Environment}'
+      RetentionInDays: !Ref LogRetentionInDays
+
+  # ===========================================================================
+  # Functions
+  # ===========================================================================
+  ReportsCreateReportFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        # El bundle ESM contiene dependencias CJS (AWS SDK, smithy) que llaman
+        # `require` en runtime; sin este shim el init muere con
+        #   Dynamic require of "node:https" is not supported
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - create-report.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-create-report-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: create-report.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Open an orientation report (POST /v1/reports)
+      Events:
+        CreateReportApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports
+            Method: POST
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  ReportsGetReportFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - get-report.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-get-report-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: get-report.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Poll one orientation report (GET /v1/reports/{reportId})
+      Events:
+        GetReportApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}
+            Method: GET
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  ReportsListReportsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - list-reports.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-list-reports-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: list-reports.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: List the caller's orientation reports (GET /v1/reports)
+      Events:
+        ListReportsApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports
+            Method: GET
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  # Estas dos devuelven un fichero entero desde S3, no una fila. Mas memoria y
+  # mas tiempo que las otras tres: 512 MB y 10 s valen para una consulta a
+  # Postgres, no para descargar un PDF y devolverlo en base64.
+  ReportsGetReportContentFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - get-report-content.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-get-report-content-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: get-report-content.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Serve the report JSON (GET /v1/reports/{reportId}/content)
+      MemorySize: 1024
+      Timeout: 29
+      Events:
+        GetReportContentApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}/content
+            Method: GET
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  ReportsGetReportPdfFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - get-report-pdf.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-get-report-pdf-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: get-report-pdf.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Serve the report PDF (GET /v1/reports/{reportId}/pdf)
+      MemorySize: 1024
+      Timeout: 29
+      Events:
+        GetReportPdfApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}/pdf
+            Method: GET
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  # Las dos puertas de cierre. Escriben una fila y nada mas, asi que se quedan
+  # con los valores por defecto de memoria y tiempo como las tres primeras.
+  #
+  # Y NO llevan `RouteSettings`: el estrangulador esta en `POST /v1/reports`, a
+  # la entrada, que es donde se decide cuanto trabajo se admite. Poner otro
+  # aqui frenaria el cierre de un trabajo que ya se pago entero -- el modelo ya
+  # respondio, el PDF ya esta en el bucket -- y el unico efecto seria dejar la
+  # fila en `pending` hasta que el barrido la matara.
+  ReportsCompleteReportFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - complete-report.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-complete-report-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: complete-report.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Close a report as ready (POST /v1/reports/{reportId}/complete)
+      Events:
+        CompleteReportApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}/complete
+            Method: POST
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+  ReportsFailReportFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Banner:
+          - js=import{createRequire as __sparkRequire}from'node:module';const require=__sparkRequire(import.meta.url);
+        OutExtension:
+          - .js=.mjs
+        Target: node24
+        Sourcemap: true
+        External:
+          - pg-native
+        EntryPoints:
+          - fail-report.ts
+    Properties:
+      FunctionName: !Sub 'spark-match-reports-fail-report-${Environment}'
+      CodeUri: ./src/handlers
+      Handler: fail-report.handler
+      Role: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/spark-match-lambda-runtime-${Environment}'
+      Description: Close a report as failed (POST /v1/reports/{reportId}/fail)
+      Events:
+        FailReportApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/reports/{reportId}/fail
+            Method: POST
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+
+Outputs:
+  ReportsCreateReportFunctionArn:
+    Value: !GetAtt ReportsCreateReportFunction.Arn
+  ReportsGetReportFunctionArn:
+    Value: !GetAtt ReportsGetReportFunction.Arn
+  ReportsListReportsFunctionArn:
+    Value: !GetAtt ReportsListReportsFunction.Arn
+  ReportsGetReportContentFunctionArn:
+    Value: !GetAtt ReportsGetReportContentFunction.Arn
+  ReportsGetReportPdfFunctionArn:
+    Value: !GetAtt ReportsGetReportPdfFunction.Arn
+  ReportsCompleteReportFunctionArn:
+    Value: !GetAtt ReportsCompleteReportFunction.Arn
+  ReportsFailReportFunctionArn:
+    Value: !GetAtt ReportsFailReportFunction.Arn
+
+  ReportsHttpApiUrl:
+    Description: Reports HTTP API Gateway endpoint URL
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  ReportsHttpApiId:
+    Description: Reports HTTP API Gateway ID
+    Value: !Ref HttpApi

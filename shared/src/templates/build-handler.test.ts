@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
-import { buildHandler, parseCorsAllowedOrigins, selectAllowOrigin } from './build-handler.js';
+import {
+  buildHandler,
+  parseCorsAllowedOrigins,
+  rawPayload,
+  selectAllowOrigin,
+} from './build-handler.js';
 import { z } from 'zod';
 
 const inputSchema = z.object({ name: z.string() });
@@ -66,6 +71,31 @@ describe('buildHandler', () => {
     expect(body.success).toBe(true);
     expect(body.data).toEqual({ ok: true });
     expect(body.meta.requestId).toBe('req-test-123');
+  });
+
+  it('honours successStatusCode for endpoints that accept work instead of completing it', async () => {
+    // Report generation answers 202: the row is created `pending` and the
+    // artefact does not exist yet. A 200 would tell the client the resource is
+    // ready and contradict the polling loop the response itself starts.
+    const handler = (async () => ({ id: 'r-1' })) as unknown as Parameters<
+      typeof buildHandler
+    >[0]['handler'];
+    const wrapped = buildHandler({
+      inputSchema,
+      handler,
+      logger,
+      tracer,
+      requireAuth: false,
+      enableCors: false,
+      successStatusCode: 202,
+    });
+
+    const result = await (
+      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string }>
+    )(makeEvent({ name: 'Alice' }));
+
+    expect(result.statusCode).toBe(202);
+    expect(JSON.parse(result.body).success).toBe(true);
   });
 
   it('returns 400 on invalid body', async () => {
@@ -149,7 +179,9 @@ describe('buildHandler', () => {
     ev.requestContext.http.method = 'OPTIONS';
 
     const result = await (
-      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+      wrapped as unknown as (
+        e: unknown,
+      ) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev);
 
     // With no CORS_ALLOWED_ORIGINS env (and no Origin request header), the
@@ -193,14 +225,10 @@ describe('selectAllowOrigin', () => {
     ).toBe('https://app.example.com');
   });
   it('returns null when the request origin is not in the allowlist', () => {
-    expect(
-      selectAllowOrigin('https://evil.example.com', ['https://app.example.com']),
-    ).toBeNull();
+    expect(selectAllowOrigin('https://evil.example.com', ['https://app.example.com'])).toBeNull();
   });
   it('returns null when no Origin header is sent', () => {
-    expect(
-      selectAllowOrigin(undefined, ['https://app.example.com']),
-    ).toBeNull();
+    expect(selectAllowOrigin(undefined, ['https://app.example.com'])).toBeNull();
   });
 });
 
@@ -240,7 +268,9 @@ describe('inline CORS middleware with CORS_ALLOWED_ORIGINS env', () => {
     const ev = makeEventWithOrigin('https://app.example.com');
     ev.requestContext.http.method = 'OPTIONS';
     const result = (await (
-      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+      wrapped as unknown as (
+        e: unknown,
+      ) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev)) as { headers: Record<string, string> };
     expect(result.headers['Access-Control-Allow-Origin']).toBe('https://app.example.com');
     expect(result.headers['Vary']).toBe('Origin');
@@ -262,7 +292,9 @@ describe('inline CORS middleware with CORS_ALLOWED_ORIGINS env', () => {
     const ev = makeEventWithOrigin('https://evil.example.com');
     ev.requestContext.http.method = 'OPTIONS';
     const result = (await (
-      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+      wrapped as unknown as (
+        e: unknown,
+      ) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev)) as { headers: Record<string, string> };
     expect(result.headers['Access-Control-Allow-Origin']).toBeUndefined();
   });
@@ -282,9 +314,78 @@ describe('inline CORS middleware with CORS_ALLOWED_ORIGINS env', () => {
     });
     const ev = makeEventWithOrigin('https://app.example.com');
     const result = (await (
-      wrapped as unknown as (e: unknown) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
+      wrapped as unknown as (
+        e: unknown,
+      ) => Promise<{ statusCode: number; body: string; headers: Record<string, string> }>
     )(ev)) as { headers: Record<string, string> };
     expect(result.headers['Access-Control-Allow-Origin']).toBe('https://app.example.com');
     expect(result.headers['Vary']).toBe('Origin');
+  });
+});
+
+describe('respuesta en bytes (rawPayload)', () => {
+  const PDF = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x00, 0xff]);
+
+  type RespuestaCruda = {
+    statusCode: number;
+    body: string;
+    isBase64Encoded?: boolean;
+    headers?: Record<string, string>;
+  };
+
+  function handlerDeBytes(fileName?: string) {
+    return buildHandler({
+      inputSchema: z.object({}),
+      logger,
+      tracer,
+      handler: async () => rawPayload(PDF, 'application/pdf', fileName),
+    });
+  }
+
+  it('marca isBase64Encoded y devuelve los bytes intactos', async () => {
+    // Sin la bandera, API Gateway entrega el base64 sin decodificar. Y el
+    // cuerpo lleva bytes que no son texto valido a proposito: si algo por el
+    // camino lo tratara como string, se corromperian.
+    const respuesta = (await handlerDeBytes()(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.isBase64Encoded).toBe(true);
+    expect(Buffer.from(respuesta.body, 'base64').equals(PDF)).toBe(true);
+  });
+
+  it('el Content-Type del fichero gana al de CORS', async () => {
+    // El middleware de CORS mete `application/json` con `??=`. Si dejara de
+    // serlo, un PDF se serviria como JSON.
+    const respuesta = (await handlerDeBytes()(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.headers?.['Content-Type']).toBe('application/pdf');
+  });
+
+  it('sin fileName no manda Content-Disposition', async () => {
+    const respuesta = (await handlerDeBytes()(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.headers?.['Content-Disposition']).toBeUndefined();
+  });
+
+  it('con fileName lo manda como descarga', async () => {
+    const respuesta = (await handlerDeBytes('informe.pdf')(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.headers?.['Content-Disposition']).toBe('attachment; filename="informe.pdf"');
+  });
+
+  it('un objeto normal sigue saliendo en el sobre JSON', async () => {
+    // La deteccion mira `kind === 'raw'` Y que el cuerpo sea un Buffer. Un
+    // payload de negocio que por casualidad tuviera `kind: 'raw'` no debe
+    // colarse por esta rama.
+    const h = buildHandler({
+      inputSchema: z.object({}),
+      logger,
+      tracer,
+      handler: async () => ({ kind: 'raw', body: 'no soy un Buffer' }),
+    });
+
+    const respuesta = (await h(makeEvent(null))) as RespuestaCruda;
+
+    expect(respuesta.isBase64Encoded).toBeUndefined();
+    expect(JSON.parse(respuesta.body).success).toBe(true);
   });
 });
