@@ -4,7 +4,7 @@ Transform:
 
 Description: >
   Spark Match Backend - Serverless DDD+EDA monolith (TypeScript on Node.js, AWS Lambda).
-  The Python AI Advisor lives in the sibling repo spark-match-08-deep-agent.
+  The Python AI Advisor lives in the sibling repo spark-match-07-deep-agent.
   See docs/architecture.md for the full design.
 
 Parameters:

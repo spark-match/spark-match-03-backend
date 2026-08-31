@@ -127,7 +127,7 @@ Este repo es **100% TypeScript** (Node.js 24). Los contextos futuros siguen la m
 | career | TypeScript | `search.ts`, `search.test.ts` |
 | matching | TypeScript | `recommend.ts`, `recommend.test.ts` |
 
-El AI Advisor (Python) vive en [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/), no en este repo.
+El AI Advisor (Python) vive en [`spark-match-07-deep-agent`](../spark-match-07-deep-agent/), no en este repo.
 
 ## 4. Naming conventions
 

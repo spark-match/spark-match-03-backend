@@ -22,7 +22,7 @@ by QA/devops).
 | Repo | Role | Workflows | Caller to devops? |
 |---|---|---|---|
 | `spark-match-02-infrastructure` | Terraform infra (dev/staging/prod) | 6 (`ci.yml` + 4 env-specific + `terraform-security-scan.yml`) | Yes — uses `reusable-tflint`, `reusable-gitleaks`, `reusable-terraform-validate`, `reusable-sonar-terraform` |
-| `spark-match-08-deep-agent` | Python AI Advisor (Bedrock/RAG) | 1 (`ci.yml`) | No — uses no devops reusables |
+| `spark-match-07-deep-agent` | Python AI Advisor (Bedrock/RAG) | 1 (`ci.yml`) | No — uses no devops reusables |
 
 ## Findings
 
@@ -71,7 +71,7 @@ these are direct workflows (not just `uses: ...reusable-terraform-*.yml`
 callers), they may have similar step-name issues. Recommend a
 follow-up audit on these 4 files if the workflow content is non-trivial.
 
-### `spark-match-08-deep-agent` — `.github/workflows/ci.yml`
+### `spark-match-07-deep-agent` — `.github/workflows/ci.yml`
 
 11 §12.1 violations on step `name:` fields:
 
@@ -103,7 +103,7 @@ would surface both at once.
 **Recommended fix**: one PR renaming the 11 step names. Same pattern
 as backend PR #118.
 
-### `spark-match-08-deep-agent` — adoption of devops reusables
+### `spark-match-07-deep-agent` — adoption of devops reusables
 
 Currently **uses NONE**. Its single `ci.yml` runs uv + pytest + ruff + mypy
 directly. This is the highest-value adoption candidate (per §12.2
@@ -128,7 +128,7 @@ Priority order:
    copied. Trivial fix; one PR. Actionlint would have caught it if
    the infra repo ran actionlint.
 
-2. **Open an issue in `spark-match-08-deep-agent`**: two parts —
+2. **Open an issue in `spark-match-07-deep-agent`**: two parts —
    (a) same trivial fix on `ci.yml` step names; (b) consider adopting
    `reusable-actionlint.yml` + `reusable-gitleaks.yml` to prevent future
    drift.

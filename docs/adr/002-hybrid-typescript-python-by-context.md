@@ -3,7 +3,7 @@
 
 **Estado**: DEPRECADO · **Fecha**: 2026-06-30 · **Deprecado**: 2026-07-28
 
-> **Nota de deprecación (2026-07-28)**: Este ADR ya no aplica. La decisión de mantener `spark-match-03-backend` como **TypeScript-only** se consolidó durante la campaña de dependencias de julio 2026 (PRs #41-#56). El AI Advisor (Python) se aloja en [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/), un repo separado con su propio ADR (ver `00-knowledge-base/decisions/ADR-001-backend-hibrido-lambda-mas-agente.md` que originalmente alineaba este diseño).
+> **Nota de deprecación (2026-07-28)**: Este ADR ya no aplica. La decisión de mantener `spark-match-03-backend` como **TypeScript-only** se consolidó durante la campaña de dependencias de julio 2026 (PRs #41-#56). El AI Advisor (Python) se aloja en [`spark-match-07-deep-agent`](../spark-match-07-deep-agent/), un repo separado con su propio ADR (ver `00-knowledge-base/decisions/ADR-001-backend-hibrido-lambda-mas-agente.md` que originalmente alineaba este diseño).
 >
 > El contenido histórico del ADR se preserva a continuación para trazabilidad, pero **no debe usarse como guía de implementación**.
 
