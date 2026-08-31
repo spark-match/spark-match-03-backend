@@ -5,7 +5,7 @@
 **Supersedes**: ADR-001 (parcialmente), alinea con `00-knowledge-base/decisions/ADR-001-backend-hibrido-lambda-mas-agente.md`
 **Relacionado**: `08-deep-agent/DEPLOYMENT.md`, `00-knowledge-base/docs/SDD/4_reglas-negocio-agente.md` §8
 
-> **Nota de actualización (2026-07-28)**: La parte "Lambda Python" de este ADR ya no aplica — `spark-match-03-backend` es 100% TypeScript (campaña de dependencias PRs #41-#56). El Matching previsto se implementará también en TypeScript. Solo la parte "AI Advisor en repo separado" sigue vigente (AI Advisor vive en [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/), FastAPI + LangGraph + Bedrock).
+> **Nota de actualización (2026-07-28)**: La parte "Lambda Python" de este ADR ya no aplica — `spark-match-03-backend` es 100% TypeScript (campaña de dependencias PRs #41-#56). El Matching previsto se implementará también en TypeScript. Solo la parte "AI Advisor en repo separado" sigue vigente (AI Advisor vive en [`spark-match-07-deep-agent`](../spark-match-07-deep-agent/), FastAPI + LangGraph + Bedrock).
 
 ### Contexto (histórico)
 

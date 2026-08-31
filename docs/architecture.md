@@ -95,7 +95,7 @@ Para Spark Match, serverless gana en **coste** y **operacional**. La penalizaci�
     │Identity │ │Assessment│ │ Career  │ │Matching │ │AI Advisor│
     │  (TS)   │ │  (TS)    │ │  (TS)   │ │  (TS)   │ │  (Py*)   │
     └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘
-                                 *AI Advisor lives in spark-match-08-deep-agent (separate repo, not in this codebase)
+                                 *AI Advisor lives in spark-match-07-deep-agent (separate repo, not in this codebase)
         │          │           │           │           │
         ▼          ▼           ▼           ▼           ▼
    ┌─────────────────────────────────────────────────────────┐
@@ -155,7 +155,7 @@ Para Spark Match, serverless gana en **coste** y **operacional**. La penalizaci�
 
 - **Responsabilidad**: chat conversacional con Bedrock, RAG sobre catálogo de carreras.
 - **Aggregates**: `Conversation`, `Message`, `KnowledgeDocument`
-- **API síncrona**: gestionada en [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/) (no en este repo).
+- **API síncrona**: gestionada en [`spark-match-07-deep-agent`](../spark-match-07-deep-agent/) (no en este repo).
 - **Eventos consumidos**: `CareerCreated/Updated` (trigger reindex RAG)
 - **Eventos emitidos**: `MessageSent`, `KnowledgeDocIngested`
 - **Storage**: gestionado en el repo del agente (FastAPI + AWS Bedrock).

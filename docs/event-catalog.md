@@ -360,7 +360,7 @@ Analytics.
 **Producido por**: AI Advisor Context.
 
 > Los payloads exactos de § 4.3–§ 4.7 estn pendientes de freeze. Se copiarn
-> del repo `spark-match-08-deep-agent` cuando esos contextos existan.
+> del repo `spark-match-07-deep-agent` cuando esos contextos existan.
 
 ---
 
