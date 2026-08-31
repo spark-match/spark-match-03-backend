@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Spark Match
 # =============================================================================
-# Deploy - Manual SAM deploy to AWS via OIDC
+# Deploy - SAM deploy to AWS via OIDC. Automatic on dev, manual for prod.
 # =============================================================================
 # Inline workflow (NOT a reusable) on purpose. This is one of the few callers
 # that needs AWS credentials and therefore cannot delegate to a generic
@@ -33,7 +33,11 @@
 #     of the three accepted matchers.
 #
 # Required GH Environments (created 2026-08-04 via `gh api`):
-#   - dev: deployment_branch_policy.custom_branch_policies=true (any branch)
+#   - dev: custom_branch_policies, and the ONLY allowed branch is `dev`.
+#     This line used to say "any branch", which was wrong and cost a failed
+#     run on 2026-08-10: a dispatch from `main` was rejected before any step
+#     with "Branch main is not allowed to deploy to dev due to environment
+#     protection rules". A manual dispatch therefore needs `--ref dev`.
 #   - production: deployment_branch_policy.protected_branches=true (main only)
 #   These were created in PR #128 / commit
 #   <GH_ENV creation is a pre-flight of this PR, not a code change>.
@@ -53,6 +57,25 @@
 name: Deploy
 
 on:
+  # dev se despliega solo al integrar. Era el unico repositorio del proyecto
+  # sin esto -- 04-frontend y 08-deep-agent llevan `push: [dev, main]` desde
+  # siempre -- y la asimetria no estaba justificada en ningun sitio: el
+  # encabezado explica por que el workflow es inline y no reusable, no por que
+  # habia que lanzarlo a mano.
+  #
+  # El coste de que fuera manual no era la molestia. Este workflow es lo unico
+  # que aplica las migraciones contra RDS (paso `apply-database-migrations`),
+  # asi que entre mergear y acordarse de desplegar, el codigo de `dev` y el
+  # esquema de su base de datos estaban desincronizados por tiempo
+  # indefinido. La migracion 005 ya describia el despliegue como el mecanismo
+  # que cierra esa ventana; solo faltaba dispararlo.
+  #
+  # SOLO `dev`. Un push a `main` NO despliega: produccion sigue siendo un acto
+  # deliberado, y ademas el entorno `production` de GitHub esta atado a ramas
+  # protegidas. Poner `main` aqui haria que cada merge a produccion aplicara
+  # migraciones sin que nadie lo pidiera.
+  push:
+    branches: [dev]
   workflow_dispatch:
     inputs:
       environment:
@@ -75,7 +98,7 @@ permissions:
 # an indeterminate state. Group key includes inputs.environment so
 # dev / staging / prod can deploy in parallel. Closes B15.
 concurrency:
-  group: deploy-${{ github.workflow }}-${{ inputs.environment }}
+  group: deploy-${{ github.workflow }}-${{ inputs.environment || 'dev' }}
   cancel-in-progress: false
 
 jobs:
@@ -167,7 +190,7 @@ jobs:
       - name: configure-aws-credentials-oidc-deploy
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::681526276858:role/spark-match-sam-deploy-${{ inputs.environment }}
+          role-to-assume: arn:aws:iam::681526276858:role/spark-match-sam-deploy-${{ inputs.environment || 'dev' }}
           aws-region: us-east-1
 
       # ------------------------------------------------------------------
@@ -190,7 +213,7 @@ jobs:
       - name: read-network-and-cors-config-from-ssm
         id: config
         env:
-          ENV_NAME: ${{ inputs.environment }}
+          ENV_NAME: ${{ inputs.environment || 'dev' }}
         run: |
           set -euo pipefail
           get() {
@@ -222,7 +245,7 @@ jobs:
 
       - name: sam-deploy
         env:
-          ENV_NAME: ${{ inputs.environment }}
+          ENV_NAME: ${{ inputs.environment || 'dev' }}
           RETENTION: ${{ inputs.environment == 'prod' && '365' || '14' }}
           SUBNETS: ${{ steps.config.outputs.subnets }}
           SGS: ${{ steps.config.outputs.security-groups }}
@@ -283,7 +306,7 @@ jobs:
       # ------------------------------------------------------------------
       - name: apply-database-migrations
         env:
-          ENV_NAME: ${{ inputs.environment }}
+          ENV_NAME: ${{ inputs.environment || 'dev' }}
         run: |
           set -euo pipefail
 
@@ -390,10 +413,20 @@ jobs:
       #     tiene permiso" (500). OJO: sin header Authorization la API
       #     corta con 401 sin llegar a invocarlo, asi que esa variante no
       #     prueba nada del authorizer.
+      #
+      #   reports con un Bearer invalido -> 403
+      #     La misma sonda contra la SEGUNDA API. Vale la pena repetirla
+      #     porque el contexto de informes reusa el Lambda authorizer de
+      #     identity por ARN, y con un ARN externo SAM no genera el
+      #     Lambda::Permission: va declarado a mano en
+      #     contexts/reports/template.yaml. Si ese recurso se cae o se
+      #     escribe mal, TODA ruta de informes responde 500 y el deploy
+      #     sigue saliendo verde -- exactamente el bug del 2026-08-05, en
+      #     un stack donde nadie lo estaba mirando.
       # ------------------------------------------------------------------
       - name: smoke-test
         env:
-          ENV_NAME: ${{ inputs.environment }}
+          ENV_NAME: ${{ inputs.environment || 'dev' }}
           BOGUS_TOKEN: smoke-probe-invalid
         run: |
           set -euo pipefail
@@ -406,6 +439,16 @@ jobs:
             exit 1
           fi
           echo "API: ${API}"
+
+          REPORTS_API="$(aws cloudformation describe-stacks \
+            --stack-name "spark-match-backend-${ENV_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='ReportsHttpApiUrl'].OutputValue" \
+            --output text)"
+          if [ -z "${REPORTS_API}" ] || [ "${REPORTS_API}" = "None" ]; then
+            echo "::error::el stack no expone ReportsHttpApiUrl"
+            exit 1
+          fi
+          echo "API informes: ${REPORTS_API}"
 
           probe() {
             local name="$1" expected="$2" got="$3"
@@ -429,12 +472,16 @@ jobs:
           AUTHZ_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
             "${API}/v1/users/me" -H "${BOGUS_HEADER}")"
 
+          REPORTS_AUTHZ_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            "${REPORTS_API}/v1/reports" -H "${BOGUS_HEADER}")"
+
           FAILED=0
-          probe "login responde (handler vivo)" 401 "${LOGIN_CODE}" || FAILED=1
-          probe "authorizer invocable"          403 "${AUTHZ_CODE}" || FAILED=1
+          probe "login responde (handler vivo)"   401 "${LOGIN_CODE}" || FAILED=1
+          probe "authorizer invocable"            403 "${AUTHZ_CODE}" || FAILED=1
+          probe "authorizer invocable (informes)" 403 "${REPORTS_AUTHZ_CODE}" || FAILED=1
 
           if [ "${FAILED}" -ne 0 ]; then
-            echo "::error::El deploy creo los recursos pero la API no responde como debe. Revisa los log groups /aws/lambda/spark-match-identity-*-${ENV_NAME}."
+            echo "::error::El deploy creo los recursos pero la API no responde como debe. Revisa los log groups /aws/lambda/spark-match-identity-*-${ENV_NAME} y /aws/lambda/spark-match-reports-*-${ENV_NAME}."
             exit 1
           fi
           echo "Smoke test OK."
