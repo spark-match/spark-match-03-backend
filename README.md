@@ -1,7 +1,7 @@
 ﻿# Spark Match Backend
 
 > **Serverless DDD+EDA monolith** built on AWS Lambda + TypeScript (Node.js).
-> The Python AI Advisor lives in the sibling repo [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/) (Python + LangChain + AWS Bedrock).
+> The Python AI Advisor lives in the sibling repo [`spark-match-07-deep-agent`](../spark-match-07-deep-agent/) (Python + LangChain + AWS Bedrock).
 >
 > _Last verified against `spark-match-01-devops@main` (PR #117, 26 Jul 2026): SonarCloud CI improvements active — fail-loud on QG timeout, cached `~/.sonar`, architecture sensor skipped._
 > _Dependency snapshot (PR #55, 28 Jul 2026): TypeScript 6, Node.js 24, vitest 4, ESLint 10, Zod 4, jose 6.2.4._
@@ -161,7 +161,7 @@ See [docs/architecture.md](docs/architecture.md) for the full design.
 ```
 
 Note: this repo is TypeScript only. The Python AI Advisor lives in
-[`spark-match-08-deep-agent`](../spark-match-08-deep-agent/).
+[`spark-match-07-deep-agent`](../spark-match-07-deep-agent/).
 
 ## 🎯 Team
 
