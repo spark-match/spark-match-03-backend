@@ -27,7 +27,7 @@ Antes de proponer opciones, esto es lo que AWS ofrece hoy, **no lo que ofrecía 
   - **Social** (sub-servicio): WhatsApp Business + LINE Messenger. API: `social-messaging SendWhatsAppMessage`. Costo por conversation (utility ~$0.025 USD, marketing ~$0.08 USD, ventana 24h).
 - **Amazon SES** nuevos pricing plans (jul-2026): bundles incluidos (dedicated IPs, Virtual Deliverability Manager, suppression lists) hasta 22% más barato que comprarlos sueltos. Multi-tenancy con suppression lists aislados por tenant (feature nueva jul-2026).
 - Existe una **arquitectura de referencia oficial** publicada por AWS para omnichannel fallback (WhatsApp + SMS + email) usando API Gateway + SQS + Lambda + SNS callbacks + DynamoDB status table. Aplica los mismos patrones que ya usamos (ADR-006).
-- Bedrock AgentCore + Strands Agents SDK es el framework oficial AWS para AI agents (relevante para integración con `spark-match-08-deep-agent` y channel orchestration con AI, pero fuera de MVP).
+- Bedrock AgentCore + Strands Agents SDK es el framework oficial AWS para AI agents (relevante para integración con `spark-match-07-deep-agent` y channel orchestration con AI, pero fuera de MVP).
 
 ## Opciones consideradas
 
@@ -194,7 +194,7 @@ Igual que B pero usando el módulo `@aws-lambda-powertools/idempotency` con pers
 
 - AWS Messaging Blog, jul-2026: ["Getting started with AWS End User Messaging Notify"](https://aws.amazon.com/blogs/messaging-and-targeting/getting-started-with-aws-end-user-messaging-notify/) — confirma Notify para SMS/OTP transaccional.
 - AWS Messaging Blog, jul-2026: ["Adding LINE Messenger to your AWS omnichannel fallback solution"](https://aws.amazon.com/blogs/messaging-and-targeting/adding-line-messenger-to-your-aws-omnichannel-fallback-solution/) — arquitectura de referencia oficial para omnichannel (WhatsApp + SMS + email) que aplica a spark-match.
-- AWS Messaging Blog, jun-2026: ["Build an AI-powered WhatsApp assistant with Strands Agents SDK and AWS End User Messaging Social"](https://aws.amazon.com/blogs/messaging-and-targeting/build-an-ai-powered-real-estate-assistant-on-whatsapp-using-strands-agents-sdk-and-aws-end-user-messaging/) — patrón de integración WhatsApp con AI agents (relevante para `spark-match-08-deep-agent`).
+- AWS Messaging Blog, jun-2026: ["Build an AI-powered WhatsApp assistant with Strands Agents SDK and AWS End User Messaging Social"](https://aws.amazon.com/blogs/messaging-and-targeting/build-an-ai-powered-real-estate-assistant-on-whatsapp-using-strands-agents-sdk-and-aws-end-user-messaging/) — patrón de integración WhatsApp con AI agents (relevante para `spark-match-07-deep-agent`).
 - AWS Messaging Blog, jul-2026: ["Isolate email suppression per tenant with Amazon SES"](https://aws.amazon.com/blogs/messaging-and-targeting/isolate-email-suppression-per-tenant-with-amazon-ses/) — feature nueva no aplicable a MVP (single tenant), pero arquitectura ya la soporta.
 - [AWS End User Messaging Social — SendWhatsAppMessage API](https://docs.aws.amazon.com/social-messaging/latest/APIReference/API_SendWhatsAppMessage.html) — API oficial WhatsApp Business.
 - ADR-005 (EventBridge como bus principal) y ADR-006 (coreografía + DLQ + idempotencia) — bases arquitectónicas sobre las que se construye Notifications.

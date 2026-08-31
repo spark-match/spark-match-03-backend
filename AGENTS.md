@@ -447,7 +447,7 @@ Only its `bats` job generalizes.
 |---|---|---|
 | [`spark-match-01-devops`](../spark-match-01-devops/) | Shared CI recipe catalog, governance manifest, org rulesets | single `main` + SemVer tags |
 | [`spark-match-02-infrastructure`](../spark-match-02-infrastructure/) | Terraform (VPC, KMS, OIDC, IAM roles this repo deploys with) | `dev` + `main` |
-| [`spark-match-08-deep-agent`](../spark-match-08-deep-agent/) | Python AI Advisor | — |
+| [`spark-match-07-deep-agent`](../spark-match-07-deep-agent/) | Python AI Advisor | — |
 
 Naming conventions are owned upstream: `spark-match-01-devops/AGENTS.md` §5.1 is the source of truth
 for kebab-case and brand spellings; §12.1 below mirrors it.
