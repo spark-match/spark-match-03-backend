@@ -105,7 +105,7 @@ sam deploy --config-env prod
                              │ (HTTP, no in this repo)
                              ▼
                       ┌────────────────┐
-                      │ 08-deep-agent  │  ← Separate repo, AgentCore Runtime
+                      │ 07-deep-agent  │  ← Separate repo, ECS Fargate
                       │ (FastAPI +     │
                      │  LangGraph)    │
                      └────────────────┘
