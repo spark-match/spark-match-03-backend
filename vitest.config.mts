@@ -27,6 +27,10 @@ export default defineConfig({
       ],
       exclude: [
         '**/*.test.ts',
+        // Los `*.itest.ts` corren en otro config, contra un Postgres de
+        // verdad. Sin excluirlos aqui contarian como fuente sin cubrir y
+        // bajarian la cobertura por existir.
+        '**/*.itest.ts',
         '**/*.spec.ts',
         '**/types.ts',
         '**/index.ts',
