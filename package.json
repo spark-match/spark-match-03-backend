@@ -53,7 +53,7 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.68.0",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.10",
+    "vitest": "^5.0.0",
     "zod": "^4.5.4"
   },
   "dependencies": {
