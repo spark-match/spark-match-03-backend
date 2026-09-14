@@ -19,8 +19,8 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.145",
-    "@types/node": "^26.4.0",
+    "@types/aws-lambda": "^8.10.163",
+    "@types/node": "^26.5.1",
     "node-pg-migrate": "^9.0.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
