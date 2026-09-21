@@ -14,9 +14,9 @@
   },
   "dependencies": {
     "@spark-match/shared": "0.1.0",
-    "kysely": "^0.29.5",
+    "kysely": "^0.29.6",
     "pg": "^8.23.0",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",
