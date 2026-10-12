@@ -35,7 +35,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@aws-sdk/client-ssm": "^3.1121.0",
+    "@aws-sdk/client-ssm": "^3.1148.0",
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^26.4.0",
     "@types/pg": "^8.23.1",
@@ -54,16 +54,16 @@
     "typescript-eslint": "^8.68.0",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.10",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "dependencies": {
-    "@aws-lambda-powertools/idempotency": "^2.35.0",
-    "@aws-lambda-powertools/logger": "^2.35.0",
-    "@aws-lambda-powertools/metrics": "^2.35.0",
-    "@aws-lambda-powertools/parameters": "^2.35.0",
-    "@aws-lambda-powertools/tracer": "^2.35.0",
-    "@aws-sdk/client-eventbridge": "^3.1121.0",
-    "@aws-sdk/client-secrets-manager": "^3.1121.0",
+    "@aws-lambda-powertools/idempotency": "^2.36.0",
+    "@aws-lambda-powertools/logger": "^2.36.0",
+    "@aws-lambda-powertools/metrics": "^2.36.0",
+    "@aws-lambda-powertools/parameters": "^2.36.0",
+    "@aws-lambda-powertools/tracer": "^2.36.0",
+    "@aws-sdk/client-eventbridge": "^3.1148.0",
+    "@aws-sdk/client-secrets-manager": "^3.1148.0",
     "@middy/core": "^7.9.2",
     "@middy/do-not-wait-for-empty-event-loop": "^7.9.2",
     "@middy/http-cors": "^7.9.2",
@@ -71,8 +71,8 @@
     "@middy/http-header-normalizer": "^7.9.2",
     "@middy/http-json-body-parser": "^7.9.2",
     "@middy/validator": "^7.9.2",
-    "kysely": "^0.29.5",
-    "pg": "^8.23.0"
+    "kysely": "^0.29.6",
+    "pg": "^8.23.1"
   },
   "engines": {
     "node": ">=24.0.0",
